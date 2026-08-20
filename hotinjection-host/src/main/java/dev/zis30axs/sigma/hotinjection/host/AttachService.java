@@ -8,6 +8,8 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -62,16 +64,46 @@ public final class AttachService {
             throw new IOException("Agent JAR not found: " + agentJar);
         }
 
-        StringBuilder options = new StringBuilder("source=host;notice=").append(showNotice);
+        File ackFile = File.createTempFile("sigma-hotinjection-ack-", ".txt");
+        if (!ackFile.delete()) {
+            ackFile.deleteOnExit();
+        }
+        ackFile.deleteOnExit();
+
+        StringBuilder options = new StringBuilder("source=host;notice=").append(showNotice)
+                .append(";ack=").append(ackFile.getAbsolutePath());
         if (version != null && !version.trim().isEmpty() && !"auto".equalsIgnoreCase(version)) {
             options.append(";version=").append(version.trim());
         }
 
         VirtualMachine vm = VirtualMachine.attach(pid.trim());
+        Exception loadFailure = null;
         try {
             vm.loadAgent(agentJar.getCanonicalPath(), options.toString());
+        } catch (Exception error) {
+            loadFailure = error;
         } finally {
             vm.detach();
+        }
+
+        if (acknowledged(ackFile)) {
+            return;
+        }
+        if (loadFailure != null) {
+            throw loadFailure;
+        }
+        throw new IOException("Agent attach returned without a Sigma initialization acknowledgement.");
+    }
+
+    private static boolean acknowledged(File ackFile) {
+        if (ackFile == null || !ackFile.isFile()) {
+            return false;
+        }
+        try {
+            List<String> lines = Files.readAllLines(ackFile.toPath(), StandardCharsets.UTF_8);
+            return !lines.isEmpty() && "OK".equals(lines.get(0).trim());
+        } catch (IOException ignored) {
+            return false;
         }
     }
 
