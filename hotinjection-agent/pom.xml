@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>dev.zis30axs.sigma</groupId>
+        <artifactId>sigma-hotinjection-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+    <artifactId>hotinjection-agent</artifactId>
+    <dependencies>
+        <dependency>
+            <groupId>dev.zis30axs.sigma</groupId>
+            <artifactId>hotinjection-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+    </dependencies>
+    <build>
+        <finalName>sigma-hotinjection-agent</finalName>
+        <plugins>
+            <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.13.0</version><configuration><release>8</release></configuration></plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId><artifactId>maven-shade-plugin</artifactId><version>3.6.0</version>
+                <executions><execution><phase>package</phase><goals><goal>shade</goal></goals><configuration><createDependencyReducedPom>false</createDependencyReducedPom><shadedArtifactAttached>false</shadedArtifactAttached><transformers><transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer"><manifestEntries><Agent-Class>dev.zis30axs.sigma.hotinjection.agent.HotInjectionAgent</Agent-Class><Premain-Class>dev.zis30axs.sigma.hotinjection.agent.HotInjectionAgent</Premain-Class><Can-Redefine-Classes>false</Can-Redefine-Classes><Can-Retransform-Classes>false</Can-Retransform-Classes></manifestEntries></transformer></transformers></configuration></execution></executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
