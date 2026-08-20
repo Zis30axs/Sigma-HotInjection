@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sigma HotInjection ClickGUI Prototype</title>
+<style>
+:root{--bg:#0d0f18;--glass:rgba(30,34,48,.68);--glass2:rgba(40,44,60,.78);--stroke:rgba(255,255,255,.13);--text:#f4f6ff;--muted:#adb2c7;--purple:#b478ff;--cyan:#5bcdff}
+*{box-sizing:border-box}html,body{height:100%;margin:0}body{font-family:"Segoe UI",sans-serif;color:var(--text);background:radial-gradient(circle at 18% 22%,rgba(174,103,255,.28),transparent 28%),radial-gradient(circle at 82% 18%,rgba(84,206,255,.22),transparent 27%),linear-gradient(135deg,#0d0f18,#171b2a);overflow:hidden}
+body:before{content:"";position:fixed;inset:-80px;background:inherit;filter:blur(44px);opacity:.78}
+.app{position:relative;width:min(1180px,94vw);height:min(720px,92vh);margin:4vh auto;padding:20px;display:grid;grid-template-columns:210px 1fr 318px;gap:16px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);border-radius:30px;box-shadow:0 28px 80px rgba(0,0,0,.38);backdrop-filter:blur(26px)}
+.panel{border-radius:26px;background:var(--glass);border:1px solid var(--stroke);box-shadow:inset 0 1px rgba(255,255,255,.05),0 12px 34px rgba(0,0,0,.18);backdrop-filter:blur(24px);overflow:hidden}
+.side{padding:22px 14px;display:flex;flex-direction:column}.brand{padding:0 8px 30px}.brand-main{font-size:31px;font-weight:700;letter-spacing:.5px}.prod{font-size:13px;vertical-align:top;margin-left:4px}.brand-sub{font-size:10px;letter-spacing:2.4px;color:var(--muted);margin-top:7px}
+.cats{display:grid;gap:8px}.cat{padding:13px 16px;border-radius:16px;color:#ccd1e3;cursor:pointer;border:1px solid transparent}.cat:hover{background:rgba(255,255,255,.055)}.cat.active{color:white;background:linear-gradient(135deg,rgba(180,120,255,.28),rgba(91,205,255,.16));border-color:rgba(255,255,255,.13);box-shadow:0 0 22px rgba(180,120,255,.13)}
+.target{margin-top:auto;padding:14px;border-radius:17px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.09)}.label,.kicker{font-size:10px;letter-spacing:1.3px;color:var(--muted)}.target b{display:block;margin-top:6px;font-size:15px}
+.main,.settings{padding:22px 18px}.title{font-size:28px;font-weight:700;margin:6px 0 5px}.status{font-size:11px;color:var(--muted);margin-bottom:18px}.modules{display:grid;gap:10px;overflow:auto;max-height:calc(100% - 90px);padding-right:3px}.module{min-height:72px;padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.09);display:flex;align-items:center;gap:14px;cursor:pointer}.module.active{border-color:rgba(180,120,255,.34);background:rgba(255,255,255,.085);box-shadow:0 0 24px rgba(180,120,255,.09)}.module-info{flex:1}.module-name{font-size:17px;font-weight:650}.module-desc{font-size:11px;color:var(--muted);margin-top:6px}
+.toggle{width:48px;height:26px;border-radius:20px;background:rgba(255,255,255,.10);padding:3px;cursor:pointer;transition:.2s}.toggle:after{content:"";display:block;width:20px;height:20px;border-radius:50%;background:#f8f9ff;transition:.2s}.toggle.on{background:linear-gradient(90deg,var(--purple),var(--cyan));box-shadow:0 0 18px rgba(180,120,255,.25)}.toggle.on:after{transform:translateX(22px)}
+.settings{background:var(--glass2)}.state,.setting{padding:14px 15px;border-radius:17px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.09);margin-top:12px}.row{display:flex;align-items:center;justify-content:space-between;gap:10px}.value{font-size:14px;font-weight:650;margin-top:6px}.slider{height:8px;margin-top:14px;border-radius:10px;background:rgba(255,255,255,.10);overflow:hidden}.slider i{display:block;width:58%;height:100%;background:linear-gradient(90deg,var(--purple),var(--cyan));border-radius:10px}.mode{margin-top:8px;padding:8px 10px;border-radius:11px;background:rgba(255,255,255,.06);display:flex;justify-content:space-between}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:20px}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="panel side">
+    <div class="brand"><div class="brand-main">SIGMA<span class="prod">PROD</span></div><div class="brand-sub">HOT INJECTION</div></div>
+    <div class="cats" id="cats"></div>
+    <div class="target"><div class="label">TARGET</div><b>Minecraft 26.2</b></div>
+  </aside>
+  <main class="panel main">
+    <div class="kicker">MODULE BROWSER</div><div class="title" id="title">Combat</div><div class="status">Connected · modules are supplied by ModuleManager</div>
+    <div class="modules" id="modules"></div>
+  </main>
+  <section class="panel settings">
+    <div class="kicker">SETTINGS</div><div class="title" id="settingTitle">KillAura</div>
+    <div class="state"><div class="row"><div><div class="label">MODULE STATE</div><div class="value" id="stateText">Enabled</div></div><div class="toggle on" id="stateToggle"></div></div></div>
+    <div id="settingBody"></div>
+  </section>
+</div>
+<script>
+const data={
+Combat:[
+ {name:'KillAura',enabled:true,desc:'Targets nearby entities using the active version adapter.',settings:[['NUMBER','Range','3.4'],['MODE','Mode','Switch'],['BOOLEAN','AutoBlock','true']]},
+ {name:'Velocity',enabled:false,desc:'Configurable client movement response.',settings:[['NUMBER','Horizontal','80'],['NUMBER','Vertical','90']]},
+ {name:'Criticals',enabled:false,desc:'Combat event example module.',settings:[['MODE','Mode','Packet']]}
+],
+Movement:[{name:'Sprint',enabled:true,desc:'Keeps movement state active.',settings:[['BOOLEAN','Omni','true']]},{name:'Speed',enabled:false,desc:'Movement module placeholder.',settings:[['MODE','Mode','Strafe'],['NUMBER','Multiplier','1.2']]}],
+Player:[{name:'AutoTool',enabled:false,desc:'Player utility module.',settings:[['NUMBER','Delay','50']]}],
+Render:[{name:'HUD',enabled:true,desc:'Client-side render controls.',settings:[['BOOLEAN','Bloom','true']]}],
+Misc:[{name:'AutoGG',enabled:false,desc:'Miscellaneous client module.',settings:[]}],
+Client:[{name:'ClickGUI',enabled:true,desc:'External controller compatibility module.',settings:[]}]
+};
+let cat='Combat',selected=data.Combat[0];
+const cats=document.getElementById('cats'),mods=document.getElementById('modules'),body=document.getElementById('settingBody');
+function renderCats(){cats.innerHTML='';Object.keys(data).forEach(c=>{const e=document.createElement('div');e.className='cat'+(c===cat?' active':'');e.textContent=c;e.onclick=()=>{cat=c;selected=data[c][0];render()};cats.appendChild(e)})}
+function renderMods(){mods.innerHTML='';document.getElementById('title').textContent=cat;data[cat].forEach(m=>{const e=document.createElement('div');e.className='module'+(m===selected?' active':'');e.innerHTML=`<div class="module-info"><div class="module-name">${m.name}</div><div class="module-desc">${m.desc}</div></div><div class="toggle ${m.enabled?'on':''}"></div>`;e.onclick=()=>{selected=m;render()};e.querySelector('.toggle').onclick=x=>{x.stopPropagation();m.enabled=!m.enabled;render()};mods.appendChild(e)})}
+function renderSettings(){document.getElementById('settingTitle').textContent=selected.name;document.getElementById('stateText').textContent=selected.enabled?'Enabled':'Disabled';document.getElementById('stateToggle').className='toggle '+(selected.enabled?'on':'');body.innerHTML='';selected.settings.forEach(s=>{const e=document.createElement('div');e.className='setting';if(s[0]==='BOOLEAN')e.innerHTML=`<div class="row"><div><div class="label">${s[1].toUpperCase()}</div><div class="value">${s[2]==='true'?'On':'Off'}</div></div><div class="toggle ${s[2]==='true'?'on':''}"></div>`;else if(s[0]==='NUMBER')e.innerHTML=`<div class="label">${s[1].toUpperCase()}</div><div class="value">${s[2]}</div><div class="slider"><i></i></div>`;else e.innerHTML=`<div class="label">${s[1].toUpperCase()}</div><div class="mode"><b>${s[2]}</b><span>›</span></div>`;body.appendChild(e)})}
+document.getElementById('stateToggle').onclick=()=>{selected.enabled=!selected.enabled;render()};
+function render(){renderCats();renderMods();renderSettings()}render();
+</script>
+</body>
+</html>

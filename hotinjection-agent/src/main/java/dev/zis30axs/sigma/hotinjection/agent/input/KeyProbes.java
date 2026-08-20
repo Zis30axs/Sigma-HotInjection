@@ -1,31 +1,44 @@
 package dev.zis30axs.sigma.hotinjection.agent.input;
 
 import dev.zis30axs.sigma.hotinjection.input.KeyProbe;
+import java.lang.reflect.Method;
 
-/** Picks the keyboard source that actually exists in the target process. */
 public final class KeyProbes {
-    private KeyProbes() {
-    }
+    private KeyProbes() { }
 
-    /** LWJGL 2 first: 1.7.10 and 1.8.9. */
+    public static KeyProbe autoDetect() { return legacy(); }
+
     public static KeyProbe legacy() {
-        KeyProbe probe = usable(Lwjgl2KeyProbe.create());
-        return probe != null ? probe : usable(Lwjgl3KeyProbe.create());
+        try {
+            final Class<?> keyboard = Class.forName("org.lwjgl.input.Keyboard");
+            final Method isKeyDown = keyboard.getMethod("isKeyDown", Integer.TYPE);
+            return new KeyProbe() {
+                @Override
+                public boolean isRightShiftDown() {
+                    try {
+                        return Boolean.TRUE.equals(isKeyDown.invoke(null, Integer.valueOf(54)));
+                    } catch (Throwable ignored) {
+                        return false;
+                    }
+                }
+
+                @Override
+                public void close() { }
+            };
+        } catch (Throwable ignored) {
+            return unavailable();
+        }
     }
 
-    /** GLFW first: 1.20.1 and newer. */
     public static KeyProbe modern() {
-        KeyProbe probe = usable(Lwjgl3KeyProbe.create());
-        return probe != null ? probe : usable(Lwjgl2KeyProbe.create());
+        // GLFW requires a verified Minecraft window handle. Never guess one.
+        return unavailable();
     }
 
-    /** Used when the Minecraft version is unknown. */
-    public static KeyProbe autoDetect() {
-        KeyProbe probe = usable(Lwjgl2KeyProbe.create());
-        return probe != null ? probe : usable(Lwjgl3KeyProbe.create());
-    }
-
-    private static KeyProbe usable(KeyProbe probe) {
-        return probe != null && probe.isAvailable() ? probe : null;
+    private static KeyProbe unavailable() {
+        return new KeyProbe() {
+            @Override public boolean isRightShiftDown() { return false; }
+            @Override public void close() { }
+        };
     }
 }

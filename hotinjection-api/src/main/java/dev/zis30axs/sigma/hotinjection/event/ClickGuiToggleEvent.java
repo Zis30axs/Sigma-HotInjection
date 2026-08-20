@@ -1,23 +1,17 @@
 package dev.zis30axs.sigma.hotinjection.event;
 
-/** Posted before the ClickGUI opens or closes. Cancelling keeps the current state. */
 public final class ClickGuiToggleEvent extends CancellableEvent {
-    /** Toggle requested by the in-game hotkey. */
-    public static final String SOURCE_HOTKEY = "hotkey";
-    /** Toggle requested through the method registry. */
     public static final String SOURCE_METHOD = "method";
-    /** Toggle requested by the GUI itself (close button, ESC). */
-    public static final String SOURCE_GUI = "gui";
+    public static final String SOURCE_KEY = "key";
 
-    private final boolean opening;
     private final String source;
+    private final boolean opening;
 
-    public ClickGuiToggleEvent(boolean opening, String source) {
+    public ClickGuiToggleEvent(String source, boolean opening) {
+        this.source = source == null ? "unknown" : source;
         this.opening = opening;
-        this.source = source == null || source.trim().isEmpty() ? "unknown" : source.trim();
     }
 
-    public boolean isOpening() { return opening; }
-    public boolean isClosing() { return !opening; }
     public String getSource() { return source; }
+    public boolean isOpening() { return opening; }
 }

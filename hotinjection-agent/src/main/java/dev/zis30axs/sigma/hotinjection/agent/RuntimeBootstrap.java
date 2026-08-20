@@ -25,14 +25,12 @@ import java.lang.instrument.Instrumentation;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 final class RuntimeBootstrap {
-    /** Local-only proof that the agent is live. */
     static final String INJECTION_MESSAGE = "[SIGMA] Injected!";
 
     private static final AtomicBoolean STARTED = new AtomicBoolean();
     private static volatile HotInjectionRuntime runtime;
 
-    private RuntimeBootstrap() {
-    }
+    private RuntimeBootstrap() { }
 
     static void start(String source, AgentOptions options, Instrumentation instrumentation) throws Exception {
         if (!STARTED.compareAndSet(false, true)) {
@@ -41,42 +39,35 @@ final class RuntimeBootstrap {
         }
 
         GameAccess.install(instrumentation);
-
         HotInjectionRuntime created = new HotInjectionRuntime(instrumentation);
         runtime = created;
         AgentContext.install(created);
         registerVersions(created);
-
-        QuietNoticeModule quietNotice = created.getModuleRegistry().register(new QuietNoticeModule(created.getEventBus()));
-        if (!options.getBoolean("notice", true) || options.getBoolean("quiet", false)) {
-            quietNotice.setEnabled(true);
-        }
-
-        boolean packetGuard = options.getBoolean("packetguard", true);
-        ClientChat.setSendPathEnabled(packetGuard);
-        LocalChatModule localChat = created.getModuleRegistry().register(new LocalChatModule(created.getEventBus()));
-        if (packetGuard) {
-            localChat.setEnabled(true);
-        }
         DefaultMethods.register(created);
 
         MinecraftVersion version = VersionDetector.detect(options, System.getProperties(), instrumentation);
         VersionAdapter adapter = created.getVersionRegistry().get(version);
-        if (adapter == null) {
-            adapter = created.getVersionRegistry().get(MinecraftVersion.UNKNOWN);
-        }
+        if (adapter == null) adapter = created.getVersionRegistry().get(MinecraftVersion.UNKNOWN);
         created.activateVersion(version, adapter);
         adapter.install(new VersionContext(created, instrumentation, System.getProperties(), options.asMap()));
 
-        DefaultClickGuiButtons.register(created);
-        ClickGuiModule clickGui = created.getModuleRegistry().register(new ClickGuiModule(created));
-        if (options.getBoolean("clickgui", true)) {
-            clickGui.setEnabled(true);
+        QuietNoticeModule quietNotice = new QuietNoticeModule(created.getEventBus());
+        LocalChatModule localChat = new LocalChatModule(created.getEventBus());
+        ClickGuiModule clickGui = new ClickGuiModule(created);
+        created.getModuleManager().registerAll(quietNotice, localChat, clickGui);
+
+        if (!options.getBoolean("notice", true) || options.getBoolean("quiet", false)) {
+            quietNotice.setEnabled(true);
         }
+        boolean packetGuard = options.getBoolean("packetguard", true);
+        ClientChat.setSendPathEnabled(packetGuard);
+        if (packetGuard) localChat.setEnabled(true);
+
+        DefaultClickGuiButtons.register(created);
+        if (options.getBoolean("clickgui", true)) clickGui.setEnabled(true);
 
         LogUtil.info("Attached from " + source + "; Minecraft version=" + version.getId());
         LogUtil.info(created.getMethodRegistry().invoke("runtime.info", new MethodContext(created)));
-
         announce(created, version);
     }
 

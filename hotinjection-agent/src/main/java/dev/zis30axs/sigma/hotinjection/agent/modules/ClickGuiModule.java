@@ -1,40 +1,76 @@
 package dev.zis30axs.sigma.hotinjection.agent.modules;
 
 import dev.zis30axs.sigma.hotinjection.HotInjectionRuntime;
-import dev.zis30axs.sigma.hotinjection.agent.gui.ClickGuiController;
-import dev.zis30axs.sigma.hotinjection.agent.input.ClickGuiHotkey;
+import dev.zis30axs.sigma.hotinjection.agent.gui.SwingClickGuiHost;
+import dev.zis30axs.sigma.hotinjection.event.ClickGuiToggleEvent;
+import dev.zis30axs.sigma.hotinjection.input.KeyProbe;
 import dev.zis30axs.sigma.hotinjection.module.Module;
 import dev.zis30axs.sigma.hotinjection.module.ModuleCategory;
+import dev.zis30axs.sigma.hotinjection.module.setting.BooleanSetting;
+import dev.zis30axs.sigma.hotinjection.module.setting.NumberSetting;
+import dev.zis30axs.sigma.hotinjection.version.VersionAdapter;
 
-/** Owns the ClickGUI front-end and its RIGHT SHIFT hotkey. */
 public final class ClickGuiModule extends Module {
     private final HotInjectionRuntime runtime;
-    private final ClickGuiController controller;
-    private final ClickGuiHotkey hotkey;
+    private final BooleanSetting hotkeyEnabled = setting(new BooleanSetting(
+            "right-shift", "Right Shift Hotkey",
+            "Toggle the compatibility in-process GUI with Right Shift.", true));
+    private final NumberSetting pollInterval = setting(new NumberSetting(
+            "poll-interval", "Poll Interval", "Keyboard polling interval in milliseconds.",
+            40.0D, 20.0D, 200.0D, 10.0D));
+    private volatile boolean running;
+    private Thread keyThread;
+    private KeyProbe keyProbe;
 
     public ClickGuiModule(HotInjectionRuntime runtime) {
-        super("clickgui", "ClickGUI", ModuleCategory.RENDER, runtime.getEventBus());
+        super("click-gui", "ClickGUI", ModuleCategory.CLIENT,
+                "Compatibility in-process ClickGUI. The standalone Host controller is preferred.",
+                runtime.getEventBus());
         this.runtime = runtime;
-        this.controller = new ClickGuiController(runtime);
-        this.hotkey = new ClickGuiHotkey(runtime);
-    }
-
-    public ClickGuiController getController() {
-        return controller;
     }
 
     @Override
     protected void onEnable() {
-        runtime.setClickGuiHost(controller);
-        hotkey.start();
+        runtime.setClickGuiHost(new SwingClickGuiHost(runtime));
+        VersionAdapter adapter = runtime.getActiveAdapter();
+        keyProbe = adapter == null ? null : adapter.createKeyProbe();
+        if (keyProbe == null) return;
+
+        running = true;
+        keyThread = new Thread(new Runnable() {
+            @Override public void run() { pollKey(); }
+        }, "Sigma-HotInjection-ClickGUI-Key");
+        keyThread.setDaemon(true);
+        keyThread.start();
     }
 
     @Override
     protected void onDisable() {
-        hotkey.stop();
-        controller.shutdown();
-        if (runtime.getClickGuiHost() == controller) {
-            runtime.setClickGuiHost(null);
+        running = false;
+        if (keyProbe != null) keyProbe.close();
+        keyProbe = null;
+        if (runtime.getClickGuiHost() != null) runtime.getClickGuiHost().dispose();
+        runtime.setClickGuiHost(null);
+    }
+
+    private void pollKey() {
+        boolean previous = false;
+        while (running) {
+            boolean down = hotkeyEnabled.getValue().booleanValue()
+                    && keyProbe != null && keyProbe.isRightShiftDown();
+            VersionAdapter adapter = runtime.getActiveAdapter();
+            if (down && !previous && (adapter == null || adapter.isInWorld())) {
+                if (runtime.getClickGuiHost() != null) {
+                    runtime.getClickGuiHost().toggle(ClickGuiToggleEvent.SOURCE_KEY);
+                }
+            }
+            previous = down;
+            try {
+                Thread.sleep(Math.max(10L, Math.round(pollInterval.getValue().doubleValue())));
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+                return;
+            }
         }
     }
 }
