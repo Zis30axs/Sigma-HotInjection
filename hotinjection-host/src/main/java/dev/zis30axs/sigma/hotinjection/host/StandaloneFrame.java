@@ -1,0 +1,139 @@
+package dev.zis30axs.sigma.hotinjection.host;
+
+import javax.swing.BorderFactory;
+import javax.swing.DefaultListModel;
+import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
+import javax.swing.JFileChooser;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JList;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTextField;
+import javax.swing.ListSelectionModel;
+import javax.swing.SwingWorker;
+import javax.swing.WindowConstants;
+import java.awt.BorderLayout;
+import java.awt.FlowLayout;
+import java.awt.GridLayout;
+import java.io.File;
+
+public final class StandaloneFrame extends JFrame {
+    private final AttachService attachService = new AttachService();
+    private final DefaultListModel<TargetJvm> targets = new DefaultListModel<TargetJvm>();
+    private final JList<TargetJvm> targetList = new JList<TargetJvm>(targets);
+    private final JComboBox<String> version = new JComboBox<String>(new String[] {
+            "auto", "1.7.10", "1.8.9", "1.20.1", "1.21.11", "26.2"
+    });
+    private final JTextField agentPath = new JTextField();
+    private final JCheckBox notice = new JCheckBox("Show local injection notice", true);
+    private final JLabel status = new JLabel("Ready");
+    private final JButton attach = new JButton("Inject");
+
+    public StandaloneFrame() {
+        super("Sigma HotInjection");
+        setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
+        setSize(620, 430);
+        setLocationRelativeTo(null);
+
+        JPanel root = new JPanel(new BorderLayout(8, 8));
+        root.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        setContentPane(root);
+
+        targetList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        root.add(new JScrollPane(targetList), BorderLayout.CENTER);
+
+        JPanel top = new JPanel(new BorderLayout(6, 6));
+        top.add(new JLabel("Java processes"), BorderLayout.WEST);
+        JButton refresh = new JButton("Refresh");
+        refresh.addActionListener(event -> refreshTargets());
+        top.add(refresh, BorderLayout.EAST);
+        root.add(top, BorderLayout.NORTH);
+
+        File detectedAgent = AgentLocator.locate();
+        if (detectedAgent != null) agentPath.setText(detectedAgent.getAbsolutePath());
+
+        JPanel settings = new JPanel(new GridLayout(3, 1, 4, 4));
+        JPanel versionRow = new JPanel(new BorderLayout(6, 0));
+        versionRow.add(new JLabel("Minecraft version:"), BorderLayout.WEST);
+        versionRow.add(version, BorderLayout.CENTER);
+        settings.add(versionRow);
+
+        JPanel agentRow = new JPanel(new BorderLayout(6, 0));
+        agentRow.add(new JLabel("Agent JAR:"), BorderLayout.WEST);
+        agentRow.add(agentPath, BorderLayout.CENTER);
+        JButton browse = new JButton("Browse...");
+        browse.addActionListener(event -> chooseAgent());
+        agentRow.add(browse, BorderLayout.EAST);
+        settings.add(agentRow);
+        settings.add(notice);
+
+        JPanel bottom = new JPanel(new BorderLayout(6, 6));
+        bottom.add(settings, BorderLayout.CENTER);
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        actions.add(status);
+        attach.addActionListener(event -> attachSelected());
+        actions.add(attach);
+        bottom.add(actions, BorderLayout.SOUTH);
+        root.add(bottom, BorderLayout.SOUTH);
+
+        refreshTargets();
+    }
+
+    private void refreshTargets() {
+        targets.clear();
+        for (TargetJvm target : attachService.listTargets()) targets.addElement(target);
+        status.setText(targets.isEmpty() ? "No JVMs found" : targets.size() + " JVM(s)");
+    }
+
+    private void chooseAgent() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Choose Sigma HotInjection agent JAR");
+        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            agentPath.setText(chooser.getSelectedFile().getAbsolutePath());
+        }
+    }
+
+    private void attachSelected() {
+        final TargetJvm target = targetList.getSelectedValue();
+        if (target == null) {
+            JOptionPane.showMessageDialog(this, "Select a target Java process first.");
+            return;
+        }
+
+        final File agent = new File(agentPath.getText().trim());
+        final String selectedVersion = String.valueOf(version.getSelectedItem());
+        final boolean showNotice = notice.isSelected();
+        attach.setEnabled(false);
+        status.setText("Injecting into " + target.getPid() + "...");
+
+        new SwingWorker<Void, Void>() {
+            @Override
+            protected Void doInBackground() throws Exception {
+                attachService.attach(target.getPid(), agent, selectedVersion, showNotice);
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                attach.setEnabled(true);
+                try {
+                    get();
+                    status.setText("Injected into " + target.getPid());
+                } catch (Exception error) {
+                    status.setText("Injection failed");
+                    Throwable cause = error;
+                    while (cause.getCause() != null) cause = cause.getCause();
+                    JOptionPane.showMessageDialog(
+                            StandaloneFrame.this,
+                            cause.getMessage() == null ? cause.toString() : cause.getMessage(),
+                            "Sigma HotInjection",
+                            JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        }.execute();
+    }
+}
