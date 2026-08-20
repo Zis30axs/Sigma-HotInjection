@@ -20,6 +20,7 @@ import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.io.File;
+import java.util.List;
 
 public final class StandaloneFrame extends JFrame {
     private final AttachService attachService = new AttachService();
@@ -31,6 +32,7 @@ public final class StandaloneFrame extends JFrame {
     private final JTextField agentPath = new JTextField();
     private final JCheckBox notice = new JCheckBox("Show local injection notice", true);
     private final JLabel status = new JLabel("Ready");
+    private final JButton refresh = new JButton("Refresh");
     private final JButton attach = new JButton("Inject");
 
     public StandaloneFrame() {
@@ -48,7 +50,6 @@ public final class StandaloneFrame extends JFrame {
 
         JPanel top = new JPanel(new BorderLayout(6, 6));
         top.add(new JLabel("Java processes"), BorderLayout.WEST);
-        JButton refresh = new JButton("Refresh");
         refresh.addActionListener(event -> refreshTargets());
         top.add(refresh, BorderLayout.EAST);
         root.add(top, BorderLayout.NORTH);
@@ -84,9 +85,34 @@ public final class StandaloneFrame extends JFrame {
     }
 
     private void refreshTargets() {
-        targets.clear();
-        for (TargetJvm target : attachService.listTargets()) targets.addElement(target);
-        status.setText(targets.isEmpty() ? "No JVMs found" : targets.size() + " JVM(s)");
+        refresh.setEnabled(false);
+        status.setText("Scanning JVMs...");
+
+        new SwingWorker<List<TargetJvm>, Void>() {
+            @Override
+            protected List<TargetJvm> doInBackground() {
+                return attachService.listTargets();
+            }
+
+            @Override
+            protected void done() {
+                refresh.setEnabled(true);
+                try {
+                    List<TargetJvm> discovered = get();
+                    targets.clear();
+                    for (TargetJvm target : discovered) {
+                        targets.addElement(target);
+                    }
+                    if (!targets.isEmpty()) {
+                        targetList.setSelectedIndex(0);
+                    }
+                    status.setText(targets.isEmpty() ? "No JVMs found" : targets.size() + " JVM(s)");
+                } catch (Exception error) {
+                    status.setText("Scan failed");
+                    showError("JVM scan failed", error);
+                }
+            }
+        }.execute();
     }
 
     private void chooseAgent() {
@@ -125,15 +151,21 @@ public final class StandaloneFrame extends JFrame {
                     status.setText("Injected into " + target.getPid());
                 } catch (Exception error) {
                     status.setText("Injection failed");
-                    Throwable cause = error;
-                    while (cause.getCause() != null) cause = cause.getCause();
-                    JOptionPane.showMessageDialog(
-                            StandaloneFrame.this,
-                            cause.getMessage() == null ? cause.toString() : cause.getMessage(),
-                            "Sigma HotInjection",
-                            JOptionPane.ERROR_MESSAGE);
+                    showError("Injection failed for PID " + target.getPid(), error);
                 }
             }
         }.execute();
+    }
+
+    private void showError(String title, Throwable error) {
+        Throwable cause = error;
+        while (cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        String message = cause.getClass().getSimpleName();
+        if (cause.getMessage() != null && !cause.getMessage().trim().isEmpty()) {
+            message += ": " + cause.getMessage().trim();
+        }
+        JOptionPane.showMessageDialog(this, message, title, JOptionPane.ERROR_MESSAGE);
     }
 }
