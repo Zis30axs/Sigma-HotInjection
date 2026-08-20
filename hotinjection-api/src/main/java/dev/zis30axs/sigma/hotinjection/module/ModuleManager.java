@@ -11,6 +11,8 @@ import java.util.Map;
 public final class ModuleManager {
     private final Map<String, Module> byId = new LinkedHashMap<String, Module>();
     private final Map<String, Module> byName = new LinkedHashMap<String, Module>();
+    private final Map<Class<? extends Module>, Module> byClass =
+            new LinkedHashMap<Class<? extends Module>, Module>();
     private final Map<ModuleCategory, List<Module>> byCategory =
             new EnumMap<ModuleCategory, List<Module>>(ModuleCategory.class);
 
@@ -24,10 +26,13 @@ public final class ModuleManager {
         if (module == null) throw new NullPointerException("module");
         String idKey = normalize(module.getId());
         String nameKey = normalize(module.getName());
+        Class<? extends Module> moduleClass = module.getClass();
         if (byId.containsKey(idKey)) throw new IllegalArgumentException("Duplicate module id: " + module.getId());
         if (byName.containsKey(nameKey)) throw new IllegalArgumentException("Duplicate module name: " + module.getName());
+        if (byClass.containsKey(moduleClass)) throw new IllegalArgumentException("Duplicate module class: " + moduleClass.getName());
         byId.put(idKey, module);
         byName.put(nameKey, module);
+        byClass.put(moduleClass, module);
         byCategory.get(module.getCategory()).add(module);
         return module;
     }
@@ -42,6 +47,16 @@ public final class ModuleManager {
         String key = normalize(idOrName);
         Module module = byId.get(key);
         return module != null ? module : byName.get(key);
+    }
+
+    public synchronized <T extends Module> T get(Class<T> moduleClass) {
+        if (moduleClass == null) return null;
+        Module module = byClass.get(moduleClass);
+        return module == null ? null : moduleClass.cast(module);
+    }
+
+    public synchronized boolean contains(Class<? extends Module> moduleClass) {
+        return moduleClass != null && byClass.containsKey(moduleClass);
     }
 
     public synchronized List<Module> all() {
@@ -60,6 +75,11 @@ public final class ModuleManager {
         return Collections.unmodifiableList(result);
     }
 
+    public synchronized boolean isEnabled(Class<? extends Module> moduleClass) {
+        Module module = get(moduleClass);
+        return module != null && module.isEnabled();
+    }
+
     public synchronized boolean setEnabled(String idOrName, boolean enabled) {
         Module module = get(idOrName);
         if (module == null) return false;
@@ -67,8 +87,22 @@ public final class ModuleManager {
         return true;
     }
 
+    public synchronized boolean setEnabled(Class<? extends Module> moduleClass, boolean enabled) {
+        Module module = get(moduleClass);
+        if (module == null) return false;
+        module.setEnabled(enabled);
+        return true;
+    }
+
     public synchronized boolean toggle(String idOrName) {
         Module module = get(idOrName);
+        if (module == null) return false;
+        module.toggle();
+        return true;
+    }
+
+    public synchronized boolean toggle(Class<? extends Module> moduleClass) {
+        Module module = get(moduleClass);
         if (module == null) return false;
         module.toggle();
         return true;
