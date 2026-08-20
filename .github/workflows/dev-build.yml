@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -50,6 +53,7 @@ jobs:
           "$hash  sigma-hotinjection-$short.zip" | Set-Content -Encoding ascii "target/sigma-hotinjection-$short.zip.sha256"
 
       - name: Publish development prerelease
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
