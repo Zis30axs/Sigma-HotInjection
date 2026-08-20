@@ -1,0 +1,10 @@
+package dev.zis30axs.sigma.hotinjection.agent.version.v26_2;
+
+import dev.zis30axs.sigma.hotinjection.agent.version.AbstractVersionAdapter;
+import dev.zis30axs.sigma.hotinjection.version.MinecraftVersion;
+
+public final class V26_2Adapter extends AbstractVersionAdapter {
+    public V26_2Adapter() {
+        super(MinecraftVersion.V26_2);
+    }
+}
