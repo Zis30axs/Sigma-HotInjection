@@ -3,6 +3,8 @@ package dev.zis30axs.sigma.hotinjection.event;
 public final class ClickGuiToggleEvent extends CancellableEvent {
     public static final String SOURCE_METHOD = "method";
     public static final String SOURCE_KEY = "key";
+    public static final String SOURCE_GUI = "gui";
+    public static final String SOURCE_HOTKEY = "hotkey";
 
     private final String source;
     private final boolean opening;
