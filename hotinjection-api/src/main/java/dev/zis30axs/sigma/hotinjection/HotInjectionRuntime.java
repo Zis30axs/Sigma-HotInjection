@@ -5,11 +5,13 @@ import dev.zis30axs.sigma.hotinjection.event.EventBus;
 import dev.zis30axs.sigma.hotinjection.gui.ClickGuiHost;
 import dev.zis30axs.sigma.hotinjection.gui.ClickGuiRegistry;
 import dev.zis30axs.sigma.hotinjection.method.MethodRegistry;
+import dev.zis30axs.sigma.hotinjection.module.ModuleManager;
 import dev.zis30axs.sigma.hotinjection.module.ModuleRegistry;
 import dev.zis30axs.sigma.hotinjection.util.LogUtil;
 import dev.zis30axs.sigma.hotinjection.version.MinecraftVersion;
 import dev.zis30axs.sigma.hotinjection.version.VersionAdapter;
 import dev.zis30axs.sigma.hotinjection.version.VersionRegistry;
+
 import java.lang.instrument.Instrumentation;
 
 public final class HotInjectionRuntime {
@@ -17,7 +19,8 @@ public final class HotInjectionRuntime {
 
     private final Instrumentation instrumentation;
     private final EventBus eventBus = new EventBus();
-    private final ModuleRegistry moduleRegistry = new ModuleRegistry();
+    private final ModuleManager moduleManager = new ModuleManager();
+    private final ModuleRegistry moduleRegistry = new ModuleRegistry(moduleManager);
     private final MethodRegistry methodRegistry = new MethodRegistry();
     private final VersionRegistry versionRegistry = new VersionRegistry();
     private final ClickGuiRegistry clickGuiRegistry = new ClickGuiRegistry();
@@ -31,6 +34,7 @@ public final class HotInjectionRuntime {
 
     public Instrumentation getInstrumentation() { return instrumentation; }
     public EventBus getEventBus() { return eventBus; }
+    public ModuleManager getModuleManager() { return moduleManager; }
     public ModuleRegistry getModuleRegistry() { return moduleRegistry; }
     public MethodRegistry getMethodRegistry() { return methodRegistry; }
     public VersionRegistry getVersionRegistry() { return versionRegistry; }
@@ -46,12 +50,6 @@ public final class HotInjectionRuntime {
         this.activeAdapter = adapter;
     }
 
-    /**
-     * Posts a {@link ClientMessageEvent} and, unless a listener cancels it, hands
-     * the message to the active adapter for local-only display.
-     *
-     * @return true when the message was displayed.
-     */
     public boolean sendClientMessage(String source, String message) {
         ClientMessageEvent event = eventBus.post(new ClientMessageEvent(source, message));
         if (event.isCancelled()) {
