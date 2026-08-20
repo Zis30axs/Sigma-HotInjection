@@ -9,11 +9,69 @@
         <version>0.1.0-SNAPSHOT</version>
     </parent>
     <artifactId>hotinjection-host</artifactId>
+
+    <dependencies>
+        <dependency>
+            <groupId>dev.zis30axs.sigma</groupId>
+            <artifactId>hotinjection-agent</artifactId>
+            <version>${project.version}</version>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+
     <build>
-        <finalName>sigma-hotinjection-host</finalName>
+        <finalName>sigma-hotinjection</finalName>
         <plugins>
-            <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.13.0</version><configuration><release>17</release><compilerArgs><arg>--add-modules</arg><arg>jdk.attach</arg></compilerArgs></configuration></plugin>
-            <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-jar-plugin</artifactId><version>3.4.2</version><configuration><archive><manifest><mainClass>dev.zis30axs.sigma.hotinjection.host.HostMain</mainClass></manifest></archive></configuration></plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+                <configuration>
+                    <release>17</release>
+                    <compilerArgs>
+                        <arg>--add-modules</arg>
+                        <arg>jdk.attach</arg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.11.0</version>
+                <executions>
+                    <execution>
+                        <id>embed-agent</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy</goal>
+                        </goals>
+                        <configuration>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>dev.zis30axs.sigma</groupId>
+                                    <artifactId>hotinjection-agent</artifactId>
+                                    <version>${project.version}</version>
+                                    <type>jar</type>
+                                    <outputDirectory>${project.build.outputDirectory}/embedded</outputDirectory>
+                                    <destFileName>sigma-hotinjection-agent.jar</destFileName>
+                                </artifactItem>
+                            </artifactItems>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.4.2</version>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <mainClass>dev.zis30axs.sigma.hotinjection.host.HostMain</mainClass>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 </project>
