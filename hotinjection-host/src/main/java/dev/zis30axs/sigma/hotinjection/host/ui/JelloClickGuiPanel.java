@@ -51,6 +51,7 @@ public final class JelloClickGuiPanel extends JPanel {
     private volatile boolean busy;
     private int moduleScroll;
     private int settingScroll;
+    private int settingsPanelX = Integer.MAX_VALUE;
     private BufferedImage backdrop;
     private Dimension backdropSize = new Dimension();
 
@@ -82,15 +83,29 @@ public final class JelloClickGuiPanel extends JPanel {
             g.drawImage(backdrop, 0, 0, null);
             paintBloom(g);
 
-            int margin = 24;
-            int gap = 16;
-            int top = 24;
-            int height = getHeight() - 48;
-            int leftWidth = 210;
-            int rightWidth = 318;
+            int margin = clamp(getWidth() / 50, 12, 24);
+            int gap = clamp(getWidth() / 80, 10, 16);
+            int top = margin;
+            int height = Math.max(360, getHeight() - margin * 2);
+            int usableWidth = Math.max(620, getWidth() - margin * 2 - gap * 2);
+            int leftWidth = clamp(Math.round(usableWidth * 0.21f), 170, 220);
+            int rightWidth = clamp(Math.round(usableWidth * 0.30f), 250, 330);
+            int centerWidth = Math.max(280, usableWidth - leftWidth - rightWidth);
+            int totalWidth = leftWidth + centerWidth + rightWidth + gap * 2;
+            if (totalWidth > getWidth() - margin * 2) {
+                int overflow = totalWidth - (getWidth() - margin * 2);
+                int rightReduction = Math.min(overflow, Math.max(0, rightWidth - 230));
+                rightWidth -= rightReduction;
+                overflow -= rightReduction;
+                int leftReduction = Math.min(overflow, Math.max(0, leftWidth - 160));
+                leftWidth -= leftReduction;
+                overflow -= leftReduction;
+                centerWidth = Math.max(240, centerWidth - overflow);
+            }
+
             int centerX = margin + leftWidth + gap;
-            int rightX = getWidth() - margin - rightWidth;
-            int centerWidth = Math.max(340, rightX - gap - centerX);
+            int rightX = centerX + centerWidth + gap;
+            settingsPanelX = rightX;
 
             hitTargets.clear();
             paintGlass(g, margin, top, leftWidth, height, 26, PANEL);
@@ -105,16 +120,30 @@ public final class JelloClickGuiPanel extends JPanel {
     }
 
     private void paintSidebar(Graphics2D g, int x, int y, int width, int height) {
-        fonts.draw(g, "SIGMA", x + 22, y + 22, 31, TEXT, SkijaFontRenderer.Weight.SEMIBOLD);
-        float sigmaWidth = fonts.measure("SIGMA", 31, SkijaFontRenderer.Weight.SEMIBOLD);
-        fonts.draw(g, "PROD", x + 24 + sigmaWidth, y + 27, 13, new Color(221, 226, 242),
+        float sigmaSize = width < 188 ? 27.0f : 31.0f;
+        float prodSize = width < 188 ? 11.0f : 13.0f;
+        int sigmaX = x + 22;
+        float sigmaWidth = fonts.measure("SIGMA", sigmaSize, SkijaFontRenderer.Weight.SEMIBOLD);
+        float prodWidth = fonts.measure("PROD", prodSize, SkijaFontRenderer.Weight.SEMIBOLD);
+        float prodX = x + width - 18.0f - prodWidth;
+        while (sigmaX + sigmaWidth + 10.0f > prodX && sigmaSize > 23.0f) {
+            sigmaSize -= 1.0f;
+            sigmaWidth = fonts.measure("SIGMA", sigmaSize, SkijaFontRenderer.Weight.SEMIBOLD);
+        }
+
+        fonts.draw(g, "SIGMA", sigmaX, y + 22, sigmaSize, TEXT, SkijaFontRenderer.Weight.SEMIBOLD);
+        fonts.draw(g, "PROD", prodX, y + 27, prodSize, new Color(221, 226, 242),
                 SkijaFontRenderer.Weight.SEMIBOLD);
         fonts.draw(g, "HOT INJECTION", x + 23, y + 60, 10, MUTED, SkijaFontRenderer.Weight.REGULAR);
 
-        int categoryY = y + 112;
+        int playerY = y + height - 88;
+        int categoryY = y + 104;
+        int categoryArea = Math.max(228, playerY - categoryY - 12);
+        int categoryStep = clamp(categoryArea / CATEGORIES.length, 38, 54);
+        int categoryHeight = clamp(categoryStep - 8, 32, 46);
         for (int index = 0; index < CATEGORIES.length; index++) {
             String category = CATEGORIES[index];
-            Rectangle bounds = new Rectangle(x + 14, categoryY + index * 54, width - 28, 46);
+            Rectangle bounds = new Rectangle(x + 14, categoryY + index * categoryStep, width - 28, categoryHeight);
             boolean active = category.equals(selectedCategory);
             if (active) {
                 g.setPaint(new GradientPaint(bounds.x, bounds.y, new Color(178, 119, 255, 72),
@@ -123,27 +152,31 @@ public final class JelloClickGuiPanel extends JPanel {
                 g.setColor(new Color(255, 255, 255, 42));
                 g.drawRoundRect(bounds.x, bounds.y, bounds.width, bounds.height, 16, 16);
             }
-            fonts.draw(g, displayCategory(category), bounds.x + 16, bounds.y + 13, 16,
+            fonts.draw(g, displayCategory(category), bounds.x + 16,
+                    bounds.y + Math.max(8, (bounds.height - 17) / 2), 16,
                     active ? TEXT : new Color(205, 209, 224),
                     active ? SkijaFontRenderer.Weight.SEMIBOLD : SkijaFontRenderer.Weight.REGULAR);
             hitTargets.add(HitTarget.category(bounds, category));
         }
 
-        int playerY = y + height - 88;
         g.setColor(new Color(255, 255, 255, 16));
         g.fillRoundRect(x + 14, playerY, width - 28, 66, 17, 17);
         g.setColor(BORDER);
         g.drawRoundRect(x + 14, playerY, width - 28, 66, 17, 17);
         fonts.draw(g, "TARGET", x + 28, playerY + 12, 9, MUTED, SkijaFontRenderer.Weight.REGULAR);
-        fonts.draw(g, "Minecraft " + session.getVersion(), x + 28, playerY + 31, 15, TEXT,
+        String target = fitText("Minecraft " + session.getVersion(), width - 54, 15,
                 SkijaFontRenderer.Weight.SEMIBOLD);
+        fonts.draw(g, target, x + 28, playerY + 31, 15, TEXT, SkijaFontRenderer.Weight.SEMIBOLD);
     }
 
     private void paintModules(Graphics2D g, int x, int y, int width, int height) {
-        fonts.draw(g, "MODULE BROWSER", x + 24, y + 22, 10, MUTED, SkijaFontRenderer.Weight.REGULAR);
-        fonts.draw(g, displayCategory(selectedCategory), x + 24, y + 45, 27, TEXT,
-                SkijaFontRenderer.Weight.SEMIBOLD);
-        fonts.draw(g, status, x + 24, y + 82, 11,
+        int horizontalPadding = clamp(width / 18, 16, 24);
+        fonts.draw(g, "MODULE BROWSER", x + horizontalPadding, y + 22, 10, MUTED,
+                SkijaFontRenderer.Weight.REGULAR);
+        fonts.draw(g, displayCategory(selectedCategory), x + horizontalPadding, y + 45,
+                width < 360 ? 24 : 27, TEXT, SkijaFontRenderer.Weight.SEMIBOLD);
+        fonts.draw(g, fitText(status, width - horizontalPadding * 2, 11, SkijaFontRenderer.Weight.REGULAR),
+                x + horizontalPadding, y + 82, 11,
                 status.startsWith("Error") ? new Color(255, 136, 145) : MUTED,
                 SkijaFontRenderer.Weight.REGULAR);
 
@@ -154,19 +187,24 @@ public final class JelloClickGuiPanel extends JPanel {
         for (RemoteModule module : visible) {
             int cardHeight = 80;
             if (cardY + cardHeight >= listY && cardY <= bottom) {
-                Rectangle card = new Rectangle(x + 18, cardY, width - 36, cardHeight - 8);
+                Rectangle card = new Rectangle(x + 18, cardY, Math.max(180, width - 36), cardHeight - 8);
                 boolean selected = selectedModule != null && selectedModule.getId().equals(module.getId());
                 g.setColor(selected ? new Color(255, 255, 255, 28) : new Color(255, 255, 255, 15));
                 g.fillRoundRect(card.x, card.y, card.width, card.height, 18, 18);
                 g.setColor(selected ? new Color(184, 124, 255, 82) : BORDER);
                 g.drawRoundRect(card.x, card.y, card.width, card.height, 18, 18);
-                fonts.draw(g, module.getName(), card.x + 18, card.y + 14, 17, TEXT,
-                        SkijaFontRenderer.Weight.SEMIBOLD);
+                int toggleWidth = card.width < 250 ? 42 : 48;
+                int toggleHeight = card.width < 250 ? 24 : 26;
+                Rectangle toggle = new Rectangle(card.x + card.width - toggleWidth - 18,
+                        card.y + 20, toggleWidth, toggleHeight);
+                int textBudget = Math.max(80, toggle.x - card.x - 34);
+                fonts.draw(g, fitText(module.getName(), textBudget, 17, SkijaFontRenderer.Weight.SEMIBOLD),
+                        card.x + 18, card.y + 14, 17, TEXT, SkijaFontRenderer.Weight.SEMIBOLD);
                 String detail = module.getDescription().isEmpty()
                         ? "ModuleCategory " + displayCategory(module.getCategory()) : module.getDescription();
-                fonts.draw(g, ellipsize(detail, Math.max(12, card.width - 128)), card.x + 18, card.y + 42, 11,
-                        MUTED, SkijaFontRenderer.Weight.REGULAR);
-                Rectangle toggle = new Rectangle(card.x + card.width - 72, card.y + 20, 48, 26);
+                fonts.draw(g, fitText(detail, Math.max(80, card.width - 36), 11,
+                                SkijaFontRenderer.Weight.REGULAR),
+                        card.x + 18, card.y + 42, 11, MUTED, SkijaFontRenderer.Weight.REGULAR);
                 paintToggle(g, toggle, module.isEnabled());
                 hitTargets.add(HitTarget.module(card, module));
                 hitTargets.add(HitTarget.toggle(toggle, module));
@@ -174,23 +212,30 @@ public final class JelloClickGuiPanel extends JPanel {
             cardY += cardHeight;
         }
         if (visible.isEmpty()) {
-            fonts.draw(g, "No modules in this category", x + 26, listY + 20, 14, MUTED,
-                    SkijaFontRenderer.Weight.REGULAR);
+            fonts.draw(g, fitText("No modules in this category", width - 52, 14,
+                            SkijaFontRenderer.Weight.REGULAR),
+                    x + 26, listY + 20, 14, MUTED, SkijaFontRenderer.Weight.REGULAR);
         }
     }
 
     private void paintSettings(Graphics2D g, int x, int y, int width, int height) {
-        fonts.draw(g, "SETTINGS", x + 22, y + 22, 10, MUTED, SkijaFontRenderer.Weight.REGULAR);
+        int horizontalPadding = clamp(width / 16, 16, 22);
+        fonts.draw(g, "SETTINGS", x + horizontalPadding, y + 22, 10, MUTED,
+                SkijaFontRenderer.Weight.REGULAR);
         RemoteModule module = selectedModule;
-        fonts.draw(g, module == null ? "Select a module" : module.getName(), x + 22, y + 45, 25, TEXT,
-                SkijaFontRenderer.Weight.SEMIBOLD);
+        float titleSize = width < 275 ? 20.0f : 25.0f;
+        String title = module == null ? "Select a module" : module.getName();
+        fonts.draw(g, fitText(title, width - horizontalPadding * 2, titleSize,
+                        SkijaFontRenderer.Weight.SEMIBOLD),
+                x + horizontalPadding, y + 45, titleSize, TEXT, SkijaFontRenderer.Weight.SEMIBOLD);
         if (module == null) {
-            fonts.draw(g, "Choose a module in the middle panel", x + 22, y + 92, 12, MUTED,
-                    SkijaFontRenderer.Weight.REGULAR);
+            fonts.draw(g, fitText("Choose a module in the middle panel", width - horizontalPadding * 2,
+                            12, SkijaFontRenderer.Weight.REGULAR),
+                    x + horizontalPadding, y + 92, 12, MUTED, SkijaFontRenderer.Weight.REGULAR);
             return;
         }
 
-        Rectangle state = new Rectangle(x + 18, y + 95, width - 36, 58);
+        Rectangle state = new Rectangle(x + 18, y + 95, Math.max(190, width - 36), 58);
         g.setColor(new Color(255, 255, 255, 15));
         g.fillRoundRect(state.x, state.y, state.width, state.height, 17, 17);
         fonts.draw(g, "Module State", state.x + 16, state.y + 13, 10, MUTED, SkijaFontRenderer.Weight.REGULAR);
@@ -203,21 +248,23 @@ public final class JelloClickGuiPanel extends JPanel {
         int settingY = y + 172 - settingScroll;
         int bottom = y + height - 18;
         if (settings.isEmpty()) {
-            fonts.draw(g, "No configurable settings yet.", x + 22, settingY + 8, 12, MUTED,
-                    SkijaFontRenderer.Weight.REGULAR);
+            fonts.draw(g, fitText("No configurable settings yet.", width - horizontalPadding * 2, 12,
+                            SkijaFontRenderer.Weight.REGULAR),
+                    x + horizontalPadding, settingY + 8, 12, MUTED, SkijaFontRenderer.Weight.REGULAR);
             return;
         }
 
         for (RemoteSetting setting : settings) {
             int cardHeight = "NUMBER".equals(setting.getType()) ? 88 : 68;
             if (settingY + cardHeight >= y + 164 && settingY <= bottom) {
-                Rectangle card = new Rectangle(x + 18, settingY, width - 36, cardHeight - 8);
+                Rectangle card = new Rectangle(x + 18, settingY, Math.max(190, width - 36), cardHeight - 8);
                 g.setColor(new Color(255, 255, 255, 14));
                 g.fillRoundRect(card.x, card.y, card.width, card.height, 17, 17);
                 g.setColor(BORDER);
                 g.drawRoundRect(card.x, card.y, card.width, card.height, 17, 17);
-                fonts.draw(g, setting.getName(), card.x + 15, card.y + 12, 11, MUTED,
-                        SkijaFontRenderer.Weight.REGULAR);
+                fonts.draw(g, fitText(setting.getName(), card.width - 30, 11,
+                                SkijaFontRenderer.Weight.REGULAR),
+                        card.x + 15, card.y + 12, 11, MUTED, SkijaFontRenderer.Weight.REGULAR);
 
                 if ("BOOLEAN".equals(setting.getType())) {
                     boolean on = Boolean.parseBoolean(setting.getValue());
@@ -241,8 +288,9 @@ public final class JelloClickGuiPanel extends JPanel {
                     g.fillRoundRect(slider.x, slider.y, (int) Math.round(slider.width * ratio), slider.height, 8, 8);
                     hitTargets.add(HitTarget.setting(slider, setting));
                 } else {
-                    fonts.draw(g, setting.getValue(), card.x + 15, card.y + 34, 14, TEXT,
-                            SkijaFontRenderer.Weight.SEMIBOLD);
+                    fonts.draw(g, fitText(setting.getValue(), card.width - 52, 14,
+                                    SkijaFontRenderer.Weight.SEMIBOLD),
+                            card.x + 15, card.y + 34, 14, TEXT, SkijaFontRenderer.Weight.SEMIBOLD);
                     Rectangle mode = new Rectangle(card.x + 12, card.y + 24, card.width - 24, 30);
                     hitTargets.add(HitTarget.setting(mode, setting));
                     fonts.draw(g, "›", card.x + card.width - 28, card.y + 30, 16, MUTED,
@@ -348,7 +396,7 @@ public final class JelloClickGuiPanel extends JPanel {
     }
 
     private void handleWheel(MouseWheelEvent event) {
-        if (event.getX() > getWidth() - 360) settingScroll = Math.max(0, settingScroll + event.getWheelRotation() * 32);
+        if (event.getX() >= settingsPanelX) settingScroll = Math.max(0, settingScroll + event.getWheelRotation() * 32);
         else moduleScroll = Math.max(0, moduleScroll + event.getWheelRotation() * 32);
         repaint();
     }
@@ -368,7 +416,7 @@ public final class JelloClickGuiPanel extends JPanel {
             @Override protected void done() {
                 try {
                     modules = get();
-                    if (selectedModule == null) selectedModule = firstModuleInCategory(selectedCategory);
+                    ensureAvailableSelection();
                     status = modules.size() + " module(s) · Minecraft " + session.getVersion();
                     if (selectedModule != null) loadSettings(selectedModule);
                 } catch (Exception error) {
@@ -379,6 +427,20 @@ public final class JelloClickGuiPanel extends JPanel {
                 }
             }
         }.execute();
+    }
+
+    private void ensureAvailableSelection() {
+        if (selectedModule != null && selectedCategory.equalsIgnoreCase(selectedModule.getCategory())) return;
+        selectedModule = firstModuleInCategory(selectedCategory);
+        if (selectedModule != null) return;
+        for (String category : CATEGORIES) {
+            RemoteModule first = firstModuleInCategory(category);
+            if (first != null) {
+                selectedCategory = category;
+                selectedModule = first;
+                return;
+            }
+        }
     }
 
     private void loadSettings(final RemoteModule module) {
@@ -459,9 +521,23 @@ public final class JelloClickGuiPanel extends JPanel {
         return Character.toUpperCase(lower.charAt(0)) + lower.substring(1);
     }
 
-    private static String ellipsize(String value, int pixelBudget) {
-        int maxChars = Math.max(10, pixelBudget / 7);
-        return value.length() <= maxChars ? value : value.substring(0, Math.max(0, maxChars - 1)) + "…";
+    private String fitText(String value, int pixelBudget, float fontSize, SkijaFontRenderer.Weight weight) {
+        if (value == null || value.isEmpty() || pixelBudget <= 0) return "";
+        if (fonts.measure(value, fontSize, weight) <= pixelBudget) return value;
+        String ellipsis = "…";
+        int low = 0;
+        int high = value.length();
+        while (low < high) {
+            int middle = (low + high + 1) >>> 1;
+            String candidate = value.substring(0, middle) + ellipsis;
+            if (fonts.measure(candidate, fontSize, weight) <= pixelBudget) low = middle;
+            else high = middle - 1;
+        }
+        return value.substring(0, low) + ellipsis;
+    }
+
+    private static int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     private static double parseDouble(String value, double fallback) {
