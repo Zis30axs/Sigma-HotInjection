@@ -14,9 +14,13 @@ public final class ModuleRegistry {
     }
 
     public <T extends Module> T register(T module) { return manager.register(module); }
+    public <T extends Module> T get(Class<T> moduleClass) { return manager.get(moduleClass); }
     public Module get(String id) { return manager.get(id); }
     public List<Module> all() { return manager.all(); }
     public boolean setEnabled(String id, boolean enabled) { return manager.setEnabled(id, enabled); }
+    public boolean setEnabled(Class<? extends Module> moduleClass, boolean enabled) {
+        return manager.setEnabled(moduleClass, enabled);
+    }
     public void disableAll() { manager.disableAll(); }
     public ModuleManager manager() { return manager; }
 }

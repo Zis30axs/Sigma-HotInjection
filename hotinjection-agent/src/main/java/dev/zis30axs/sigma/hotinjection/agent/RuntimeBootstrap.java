@@ -3,11 +3,14 @@ package dev.zis30axs.sigma.hotinjection.agent;
 import dev.zis30axs.sigma.hotinjection.HotInjectionRuntime;
 import dev.zis30axs.sigma.hotinjection.agent.client.ClientChat;
 import dev.zis30axs.sigma.hotinjection.agent.client.GameAccess;
+import dev.zis30axs.sigma.hotinjection.agent.discovery.ModuleDiscovery;
 import dev.zis30axs.sigma.hotinjection.agent.gui.DefaultClickGuiButtons;
 import dev.zis30axs.sigma.hotinjection.agent.methods.DefaultMethods;
 import dev.zis30axs.sigma.hotinjection.agent.modules.CLIENT.ClickGuiModule;
 import dev.zis30axs.sigma.hotinjection.agent.modules.CLIENT.LocalChatModule;
 import dev.zis30axs.sigma.hotinjection.agent.modules.CLIENT.QuietNoticeModule;
+import dev.zis30axs.sigma.hotinjection.agent.modules.RENDER.ArrayListModule;
+import dev.zis30axs.sigma.hotinjection.agent.modules.RENDER.HudModule;
 import dev.zis30axs.sigma.hotinjection.agent.version.UnknownVersionAdapter;
 import dev.zis30axs.sigma.hotinjection.agent.version.v1_7_10.V1_7_10Adapter;
 import dev.zis30axs.sigma.hotinjection.agent.version.v1_8_9.V1_8_9Adapter;
@@ -17,10 +20,12 @@ import dev.zis30axs.sigma.hotinjection.agent.version.v26_2.V26_2Adapter;
 import dev.zis30axs.sigma.hotinjection.event.ClientMessageEvent;
 import dev.zis30axs.sigma.hotinjection.event.InjectionNoticeEvent;
 import dev.zis30axs.sigma.hotinjection.method.MethodContext;
+import dev.zis30axs.sigma.hotinjection.module.Module;
 import dev.zis30axs.sigma.hotinjection.util.LogUtil;
 import dev.zis30axs.sigma.hotinjection.version.MinecraftVersion;
 import dev.zis30axs.sigma.hotinjection.version.VersionAdapter;
 import dev.zis30axs.sigma.hotinjection.version.VersionContext;
+
 import java.lang.instrument.Instrumentation;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -51,10 +56,12 @@ final class RuntimeBootstrap {
         created.activateVersion(version, adapter);
         adapter.install(new VersionContext(created, instrumentation, System.getProperties(), options.asMap()));
 
-        QuietNoticeModule quietNotice = new QuietNoticeModule(created.getEventBus());
-        LocalChatModule localChat = new LocalChatModule(created.getEventBus());
-        ClickGuiModule clickGui = new ClickGuiModule(created);
-        created.getModuleManager().registerAll(quietNotice, localChat, clickGui);
+        ModuleDiscovery.discoverAndRegister(created);
+        QuietNoticeModule quietNotice = requireModule(created, QuietNoticeModule.class);
+        LocalChatModule localChat = requireModule(created, LocalChatModule.class);
+        ClickGuiModule clickGui = requireModule(created, ClickGuiModule.class);
+        HudModule hud = requireModule(created, HudModule.class);
+        ArrayListModule arrayList = requireModule(created, ArrayListModule.class);
 
         if (!options.getBoolean("notice", true) || options.getBoolean("quiet", false)) {
             quietNotice.setEnabled(true);
@@ -65,6 +72,8 @@ final class RuntimeBootstrap {
 
         DefaultClickGuiButtons.register(created);
         if (options.getBoolean("clickgui", true)) clickGui.setEnabled(true);
+        if (options.getBoolean("hud", true)) hud.setEnabled(true);
+        if (options.getBoolean("arraylist", true)) arrayList.setEnabled(true);
 
         LogUtil.info("Attached from " + source + "; Minecraft version=" + version.getId());
         LogUtil.info(created.getMethodRegistry().invoke("runtime.info", new MethodContext(created)));
@@ -72,6 +81,14 @@ final class RuntimeBootstrap {
     }
 
     static HotInjectionRuntime getRuntime() { return runtime; }
+
+    private static <T extends Module> T requireModule(HotInjectionRuntime runtime, Class<T> moduleClass) {
+        T module = runtime.getModuleManager().get(moduleClass);
+        if (module == null) {
+            throw new IllegalStateException("Required module was not discovered: " + moduleClass.getName());
+        }
+        return module;
+    }
 
     private static void announce(HotInjectionRuntime created, MinecraftVersion version) {
         InjectionNoticeEvent notice = created.getEventBus().post(

@@ -1,5 +1,6 @@
 package dev.zis30axs.sigma.hotinjection.host;
 
+import dev.zis30axs.sigma.hotinjection.host.overlay.HudOverlayWindow;
 import dev.zis30axs.sigma.hotinjection.host.ui.JelloClickGuiPanel;
 
 import javax.swing.BorderFactory;
@@ -19,6 +20,7 @@ import javax.swing.ListSelectionModel;
 import javax.swing.SwingWorker;
 import javax.swing.WindowConstants;
 import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.io.File;
@@ -37,6 +39,7 @@ public final class StandaloneFrame extends JFrame {
     private final JButton refresh = new JButton("Refresh");
     private final JButton attach = new JButton("Inject");
     private AgentSession session;
+    private HudOverlayWindow hudOverlay;
 
     public StandaloneFrame() {
         super("Sigma HotInjection");
@@ -141,7 +144,7 @@ public final class StandaloneFrame extends JFrame {
                 attach.setEnabled(true);
                 try {
                     session = get();
-                    showController(session);
+                    showController(session, target.getPid());
                 } catch (Exception error) {
                     status.setText("Injection failed");
                     showError("Injection failed for PID " + target.getPid(), error);
@@ -150,14 +153,24 @@ public final class StandaloneFrame extends JFrame {
         }.execute();
     }
 
-    private void showController(AgentSession activeSession) {
+    private void showController(AgentSession activeSession, String targetPid) {
         setTitle("Sigma HotInjection · Minecraft " + activeSession.getVersion());
         setContentPane(new JelloClickGuiPanel(activeSession));
         setSize(1180, 720);
-        setMinimumSize(new java.awt.Dimension(980, 620));
+        setMinimumSize(new Dimension(820, 560));
+        setAlwaysOnTop(true);
         setLocationRelativeTo(null);
         revalidate();
         repaint();
+
+        if (hudOverlay != null) hudOverlay.close();
+        try {
+            hudOverlay = new HudOverlayWindow(Long.parseLong(targetPid), activeSession);
+            hudOverlay.start();
+        } catch (RuntimeException failure) {
+            hudOverlay = null;
+            System.err.println("[Sigma HotInjection] HUD overlay could not start: " + failure);
+        }
     }
 
     private void showError(String title, Throwable error) {
@@ -172,6 +185,10 @@ public final class StandaloneFrame extends JFrame {
 
     @Override
     public void dispose() {
+        if (hudOverlay != null) {
+            hudOverlay.close();
+            hudOverlay = null;
+        }
         if (session != null) {
             try { session.close(); } catch (Exception ignored) { }
         }
