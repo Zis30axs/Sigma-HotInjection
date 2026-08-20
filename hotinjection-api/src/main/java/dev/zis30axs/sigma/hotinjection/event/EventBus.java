@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public final class EventBus {
     private final Map<Class<?>, CopyOnWriteArrayList<RegisteredListener<?>>> listeners =
-            new ConcurrentHashMap<Class<?>, CopyOnWriteArrayList<RegisteredListener<?>>();
+            new ConcurrentHashMap<Class<?>, CopyOnWriteArrayList<RegisteredListener<?>> >();
     private final AtomicLong sequence = new AtomicLong();
 
     public <E extends Event> EventSubscription subscribe(
