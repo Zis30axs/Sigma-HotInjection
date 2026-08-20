@@ -1,4 +1,4 @@
-package dev.zis30axs.sigma.hotinjection.agent.modules;
+package dev.zis30axs.sigma.hotinjection.agent.modules.CLIENT;
 
 import dev.zis30axs.sigma.hotinjection.HotInjectionRuntime;
 import dev.zis30axs.sigma.hotinjection.agent.gui.ClickGuiController;
