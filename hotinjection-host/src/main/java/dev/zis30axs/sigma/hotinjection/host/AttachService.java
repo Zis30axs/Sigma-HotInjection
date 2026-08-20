@@ -57,6 +57,16 @@ public final class AttachService {
     }
 
     public void attach(String pid, File agentJar, String version, boolean showNotice) throws Exception {
+        attach(pid, agentJar, version, showNotice, true, null);
+    }
+
+    public void attach(String pid, File agentJar, String version, boolean showNotice, boolean clickGui)
+            throws Exception {
+        attach(pid, agentJar, version, showNotice, clickGui, null);
+    }
+
+    public void attach(String pid, File agentJar, String version, boolean showNotice, boolean clickGui,
+                       String extraOptions) throws Exception {
         if (pid == null || pid.trim().isEmpty()) {
             throw new IllegalArgumentException("PID is required");
         }
@@ -71,7 +81,11 @@ public final class AttachService {
         ackFile.deleteOnExit();
 
         StringBuilder options = new StringBuilder("source=host;notice=").append(showNotice)
+                .append(";clickgui=").append(clickGui)
                 .append(";ack=").append(ackFile.getAbsolutePath());
+        if (extraOptions != null && !extraOptions.trim().isEmpty()) {
+            options.append(';').append(extraOptions.trim());
+        }
         if (version != null && !version.trim().isEmpty() && !"auto".equalsIgnoreCase(version)) {
             options.append(";version=").append(version.trim());
         }

@@ -1,12 +1,17 @@
 package dev.zis30axs.sigma.hotinjection.agent.methods;
 
 import dev.zis30axs.sigma.hotinjection.HotInjectionRuntime;
+import dev.zis30axs.sigma.hotinjection.agent.client.ClientChat;
+import dev.zis30axs.sigma.hotinjection.event.ClickGuiToggleEvent;
+import dev.zis30axs.sigma.hotinjection.event.ClientMessageEvent;
 import dev.zis30axs.sigma.hotinjection.event.InjectionNoticeEvent;
+import dev.zis30axs.sigma.hotinjection.gui.ClickGuiButton;
+import dev.zis30axs.sigma.hotinjection.gui.ClickGuiHost;
 import dev.zis30axs.sigma.hotinjection.method.HotMethod;
 import dev.zis30axs.sigma.hotinjection.method.MethodContext;
 import dev.zis30axs.sigma.hotinjection.module.Module;
-import dev.zis30axs.sigma.hotinjection.version.VersionAdapter;
 import java.util.List;
+import java.util.Locale;
 
 public final class DefaultMethods {
     private DefaultMethods() {
@@ -63,18 +68,107 @@ public final class DefaultMethods {
 
             @Override
             public String invoke(MethodContext context, List<String> arguments) {
-                VersionAdapter adapter = runtime.getActiveAdapter();
-                if (adapter == null) throw new IllegalStateException("No active version adapter");
                 String message = arguments.isEmpty() ? "Sigma HotInjection test notification" : join(arguments);
                 InjectionNoticeEvent event = runtime.getEventBus().post(
                         new InjectionNoticeEvent(runtime.getActiveVersion(), message));
-                if (!event.isCancelled()) {
-                    adapter.showClientMessage(event.getMessage());
-                    return "shown";
+                if (event.isCancelled()) {
+                    return "cancelled";
                 }
-                return "cancelled";
+                return runtime.sendClientMessage(ClientMessageEvent.SOURCE_METHOD, event.getMessage())
+                        ? "shown" : "cancelled";
             }
         });
+
+        runtime.getMethodRegistry().register(new HotMethod() {
+            @Override
+            public String getName() { return "client.message"; }
+
+            @Override
+            public String invoke(MethodContext context, List<String> arguments) {
+                if (arguments.isEmpty()) {
+                    throw new IllegalArgumentException("client.message requires <text...>");
+                }
+                return runtime.sendClientMessage(ClientMessageEvent.SOURCE_METHOD, join(arguments))
+                        ? "shown" : "cancelled";
+            }
+        });
+
+        runtime.getMethodRegistry().register(new HotMethod() {
+            @Override
+            public String getName() { return "chat.state"; }
+
+            @Override
+            public String invoke(MethodContext context, List<String> arguments) {
+                return ClientChat.describe();
+            }
+        });
+
+        runtime.getMethodRegistry().register(new HotMethod() {
+            @Override
+            public String getName() { return "clickgui.toggle"; }
+
+            @Override
+            public String invoke(MethodContext context, List<String> arguments) {
+                ClickGuiHost host = requireHost(runtime);
+                String mode = arguments.isEmpty() ? "toggle" : arguments.get(0).toLowerCase(Locale.ROOT);
+                if ("open".equals(mode)) {
+                    host.open(ClickGuiToggleEvent.SOURCE_METHOD);
+                } else if ("close".equals(mode)) {
+                    host.close(ClickGuiToggleEvent.SOURCE_METHOD);
+                } else {
+                    host.toggle(ClickGuiToggleEvent.SOURCE_METHOD);
+                }
+                return host.isOpen() ? "open" : "closed";
+            }
+        });
+
+        runtime.getMethodRegistry().register(new HotMethod() {
+            @Override
+            public String getName() { return "clickgui.state"; }
+
+            @Override
+            public String invoke(MethodContext context, List<String> arguments) {
+                ClickGuiHost host = runtime.getClickGuiHost();
+                StringBuilder state = new StringBuilder();
+                state.append("host=").append(host != null);
+                state.append(";available=").append(host != null && host.isAvailable());
+                state.append(";open=").append(host != null && host.isOpen());
+                state.append(";buttons=");
+                for (ClickGuiButton button : runtime.getClickGuiRegistry().all()) {
+                    state.append(button.getId()).append(',');
+                }
+                return state.toString();
+            }
+        });
+
+        runtime.getMethodRegistry().register(new HotMethod() {
+            @Override
+            public String getName() { return "clickgui.click"; }
+
+            @Override
+            public String invoke(MethodContext context, List<String> arguments) {
+                if (arguments.isEmpty()) {
+                    throw new IllegalArgumentException("clickgui.click requires <button-id>");
+                }
+                ClickGuiButton button = runtime.getClickGuiRegistry().get(arguments.get(0));
+                if (button == null) {
+                    throw new IllegalArgumentException("Unknown ClickGUI button: " + arguments.get(0));
+                }
+                button.getAction().perform(runtime);
+                return "clicked";
+            }
+        });
+    }
+
+    private static ClickGuiHost requireHost(HotInjectionRuntime runtime) {
+        ClickGuiHost host = runtime.getClickGuiHost();
+        if (host == null) {
+            throw new IllegalStateException("ClickGUI module is not enabled");
+        }
+        if (!host.isAvailable()) {
+            throw new IllegalStateException("ClickGUI has no display in this process");
+        }
+        return host;
     }
 
     private static String join(List<String> arguments) {

@@ -41,22 +41,31 @@ public final class HostMain {
         String version = "auto";
         File agent = AgentLocator.locate();
         boolean notice = true;
+        boolean clickGui = true;
+        StringBuilder extraOptions = new StringBuilder();
 
         for (int i = 2; i < args.length; i++) {
             if ("--version".equals(args[i]) && i + 1 < args.length) {
                 version = args[++i];
             } else if ("--agent".equals(args[i]) && i + 1 < args.length) {
                 agent = new File(args[++i]);
+            } else if ("--option".equals(args[i]) && i + 1 < args.length) {
+                if (extraOptions.length() > 0) {
+                    extraOptions.append(';');
+                }
+                extraOptions.append(args[++i]);
             } else if ("--quiet".equals(args[i])) {
                 notice = false;
+            } else if ("--no-clickgui".equals(args[i])) {
+                clickGui = false;
             }
         }
 
         if (agent == null) {
             throw new IllegalStateException("Agent JAR was not found. Use --agent <path>.");
         }
-        service.attach(pid, agent, version, notice);
-        System.out.println("OK attached pid=" + pid + " version=" + version);
+        service.attach(pid, agent, version, notice, clickGui, extraOptions.toString());
+        System.out.println("OK attached pid=" + pid + " version=" + version + " clickgui=" + clickGui);
     }
 
     private static void runStdio(AttachService service, String[] args) throws Exception {
@@ -117,7 +126,7 @@ public final class HostMain {
         System.out.println("Sigma HotInjection");
         System.out.println("  no args: open standalone UI");
         System.out.println("  --list");
-        System.out.println("  --attach <pid> [--version <auto|1.7.10|1.8.9|1.20.1|1.21.11|26.2>] [--agent <jar>] [--quiet]");
+        System.out.println("  --attach <pid> [--version <auto|1.7.10|1.8.9|1.20.1|1.21.11|26.2>] [--agent <jar>] [--quiet] [--no-clickgui] [--option k=v]");
         System.out.println("  --stdio [agent.jar]");
     }
 }

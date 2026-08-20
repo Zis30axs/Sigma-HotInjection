@@ -17,11 +17,16 @@ The first skeleton provides:
 - Method registry for future Bootstrap Lite/IPC commands.
 - Utility package for logging/reflection helpers.
 - Version adapter slots for Minecraft 1.7.10, 1.8.9, 1.20.1, 1.21.11 and 26.2.
-- A real injection-success proof: after attach, `InjectionNoticeEvent` is posted. Unless cancelled, the current adapter displays a local-only notification. No chat/network packet is sent to a server.
+- A real injection-success proof: after attach, `InjectionNoticeEvent` is posted. Unless cancelled, `[SIGMA] Injected!` is written into your own chat. No chat/network packet is sent to a server.
+- A ClickGUI toggled with RIGHT SHIFT while you are in a world, with a `TEST` button that writes `Already Injected!` into your own chat only.
+- An outbound packet hook: every packet the client writes passes through the cancellable `PacketSendEvent` before it is encoded.
 - A `quiet-notice` module demonstrating that the notification can be cancelled through the event bus.
 - Host modes for standalone UI, CLI attach, target listing, and a minimal stdin/stdout protocol intended for Bootstrap Lite.
 
-The current version adapters deliberately use a mapping-independent local toast for the proof-of-injection message. Native Minecraft chat/HUD bridges belong in individual version adapters and can be added later without changing the core registries.
+Client messages, ClickGUI state and outgoing packets all pass through
+cancellable events (`ClientMessageEvent`, `ChatSendEvent`, `ClickGuiToggleEvent`,
+`PacketSendEvent`), so a module can drop or rewrite any of them before anything
+becomes visible or reaches the network.
 
 ## Repository layout
 
@@ -71,7 +76,77 @@ java --add-modules jdk.attach -jar hotinjection-host/target/sigma-hotinjection-h
   --agent hotinjection-agent/target/sigma-hotinjection-agent.jar
 ```
 
-Use `--quiet` to enable the sample `quiet-notice` module before the `InjectionNoticeEvent` is posted. The attach still succeeds, but the local success notification is cancelled.
+Use `--quiet` to enable the sample `quiet-notice` module before the `InjectionNoticeEvent` is posted. The attach still succeeds, but the local success notification is cancelled. Use `--no-clickgui` to attach without the ClickGUI module.
+
+## ClickGUI
+
+One implementation serves every supported version, because it never touches
+Minecraft's own rendering: the menu is a Swing overlay created inside the target
+process.
+
+- `RIGHT SHIFT` toggles it while a world is loaded.
+- `TEST` writes `Already Injected!` into your own chat.
+- `ESC` or the `✕` in the header closes it; the header is draggable.
+- Entries come from `ClickGuiRegistry`, so modules can register their own buttons.
+
+Keyboard support per runtime:
+
+| Versions | Input API | Notes |
+| --- | --- | --- |
+| 1.7.10, 1.8.9 | LWJGL 2 `Keyboard` | works on vanilla and modded launches |
+| 1.20.1, 1.21.11, 26.2 | LWJGL 3 / GLFW | window handle is read from the client, or from `glfwGetCurrentContext()` on the render thread |
+
+GLFW is only ever called from the game's own task queue, and no window pointer
+is guessed. If neither input API is reachable the agent logs it and the ClickGUI
+stays available through the method registry instead of the hotkey.
+
+Methods exposed to the host/Bootstrap layer:
+
+```text
+clickgui.toggle [open|close|toggle]
+clickgui.state
+clickgui.click <button-id>
+client.message <text...>
+chat.state
+```
+
+The Swing overlay needs a windowed or borderless game window; an exclusive
+fullscreen window can paint over it.
+
+## Client-only chat
+
+HotInjection messages behave like a client-only command: the client really runs
+its own chat send path, and the packet it produces is cancelled on the way out,
+so the server never receives anything.
+
+```text
+sendClientMessage()
+  -> ClientMessageEvent      (cancel = nothing happens at all)
+  -> ChatSendEvent           (cancel = no packet is ever created)
+  -> client chat send method (invoked on the game thread, like typing in chat)
+  -> PacketSendEvent         (local-chat module cancels it before the encoder)
+  -> local echo into the chat HUD, or the toast fallback
+```
+
+The echo target is the game's real chat HUD, located reflectively: named lookups
+cover MCP, Yarn, Fabric intermediary and Forge SRG runtimes, and a structural
+pass handles fully obfuscated clients. When no chat HUD can be reached the
+message falls back to the local toast window, so the proof of injection never
+disappears silently.
+
+The packet hook is a `ChannelOutboundHandler` proxy appended to the client's
+netty pipeline. The channel is found by its netty type rather than by any
+Minecraft name, so the same code works on all five versions; packets that no
+listener cancels are forwarded untouched.
+
+The design fails closed, never towards the network: the real send path runs
+**only** when the packet guard is installed and the `local-chat` module is
+listening. Otherwise the message stays a purely local echo. While a message is
+in flight the guard drops every outgoing packet that carries text, so a renamed
+or reformatted chat packet cannot slip through either.
+
+Attach with `--option packetguard=false` to skip the network hook entirely and
+keep the plain local echo. `chat.state` reports which paths are live.
 
 ## Bootstrap Lite protocol seed
 
