@@ -1,5 +1,7 @@
 package dev.zis30axs.sigma.hotinjection.host;
 
+import dev.zis30axs.sigma.hotinjection.host.ui.JelloClickGuiPanel;
+
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
@@ -34,22 +36,27 @@ public final class StandaloneFrame extends JFrame {
     private final JLabel status = new JLabel("Ready");
     private final JButton refresh = new JButton("Refresh");
     private final JButton attach = new JButton("Inject");
+    private AgentSession session;
 
     public StandaloneFrame() {
         super("Sigma HotInjection");
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
         setSize(620, 430);
         setLocationRelativeTo(null);
+        showInjector();
+        refreshTargets();
+    }
 
+    private void showInjector() {
         JPanel root = new JPanel(new BorderLayout(8, 8));
         root.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         setContentPane(root);
-
         targetList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         root.add(new JScrollPane(targetList), BorderLayout.CENTER);
 
         JPanel top = new JPanel(new BorderLayout(6, 6));
         top.add(new JLabel("Java processes"), BorderLayout.WEST);
+        for (java.awt.event.ActionListener listener : refresh.getActionListeners()) refresh.removeActionListener(listener);
         refresh.addActionListener(event -> refreshTargets());
         top.add(refresh, BorderLayout.EAST);
         root.add(top, BorderLayout.NORTH);
@@ -76,36 +83,27 @@ public final class StandaloneFrame extends JFrame {
         bottom.add(settings, BorderLayout.CENTER);
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         actions.add(status);
+        for (java.awt.event.ActionListener listener : attach.getActionListeners()) attach.removeActionListener(listener);
         attach.addActionListener(event -> attachSelected());
         actions.add(attach);
         bottom.add(actions, BorderLayout.SOUTH);
         root.add(bottom, BorderLayout.SOUTH);
-
-        refreshTargets();
+        revalidate();
+        repaint();
     }
 
     private void refreshTargets() {
         refresh.setEnabled(false);
         status.setText("Scanning JVMs...");
-
         new SwingWorker<List<TargetJvm>, Void>() {
-            @Override
-            protected List<TargetJvm> doInBackground() {
-                return attachService.listTargets();
-            }
-
-            @Override
-            protected void done() {
+            @Override protected List<TargetJvm> doInBackground() { return attachService.listTargets(); }
+            @Override protected void done() {
                 refresh.setEnabled(true);
                 try {
                     List<TargetJvm> discovered = get();
                     targets.clear();
-                    for (TargetJvm target : discovered) {
-                        targets.addElement(target);
-                    }
-                    if (!targets.isEmpty()) {
-                        targetList.setSelectedIndex(0);
-                    }
+                    for (TargetJvm target : discovered) targets.addElement(target);
+                    if (!targets.isEmpty()) targetList.setSelectedIndex(0);
                     status.setText(targets.isEmpty() ? "No JVMs found" : targets.size() + " JVM(s)");
                 } catch (Exception error) {
                     status.setText("Scan failed");
@@ -129,26 +127,21 @@ public final class StandaloneFrame extends JFrame {
             JOptionPane.showMessageDialog(this, "Select a target Java process first.");
             return;
         }
-
         final File agent = new File(agentPath.getText().trim());
         final String selectedVersion = String.valueOf(version.getSelectedItem());
         final boolean showNotice = notice.isSelected();
         attach.setEnabled(false);
         status.setText("Injecting into " + target.getPid() + "...");
 
-        new SwingWorker<Void, Void>() {
-            @Override
-            protected Void doInBackground() throws Exception {
-                attachService.attach(target.getPid(), agent, selectedVersion, showNotice);
-                return null;
+        new SwingWorker<AgentSession, Void>() {
+            @Override protected AgentSession doInBackground() throws Exception {
+                return attachService.attachSession(target.getPid(), agent, selectedVersion, showNotice);
             }
-
-            @Override
-            protected void done() {
+            @Override protected void done() {
                 attach.setEnabled(true);
                 try {
-                    get();
-                    status.setText("Injected into " + target.getPid());
+                    session = get();
+                    showController(session);
                 } catch (Exception error) {
                     status.setText("Injection failed");
                     showError("Injection failed for PID " + target.getPid(), error);
@@ -157,15 +150,31 @@ public final class StandaloneFrame extends JFrame {
         }.execute();
     }
 
+    private void showController(AgentSession activeSession) {
+        setTitle("Sigma HotInjection · Minecraft " + activeSession.getVersion());
+        setContentPane(new JelloClickGuiPanel(activeSession));
+        setSize(1180, 720);
+        setMinimumSize(new java.awt.Dimension(980, 620));
+        setLocationRelativeTo(null);
+        revalidate();
+        repaint();
+    }
+
     private void showError(String title, Throwable error) {
         Throwable cause = error;
-        while (cause.getCause() != null) {
-            cause = cause.getCause();
-        }
+        while (cause.getCause() != null) cause = cause.getCause();
         String message = cause.getClass().getSimpleName();
         if (cause.getMessage() != null && !cause.getMessage().trim().isEmpty()) {
             message += ": " + cause.getMessage().trim();
         }
         JOptionPane.showMessageDialog(this, message, title, JOptionPane.ERROR_MESSAGE);
+    }
+
+    @Override
+    public void dispose() {
+        if (session != null) {
+            try { session.close(); } catch (Exception ignored) { }
+        }
+        super.dispose();
     }
 }
