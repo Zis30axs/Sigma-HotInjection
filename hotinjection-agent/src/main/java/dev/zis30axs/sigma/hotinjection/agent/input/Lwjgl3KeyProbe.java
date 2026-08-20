@@ -4,17 +4,11 @@ import dev.zis30axs.sigma.hotinjection.agent.client.GameAccess;
 import dev.zis30axs.sigma.hotinjection.input.HotKey;
 import dev.zis30axs.sigma.hotinjection.input.KeyProbe;
 import dev.zis30axs.sigma.hotinjection.util.LogUtil;
+
 import java.lang.reflect.Method;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * Keyboard source for LWJGL 3 / GLFW runtimes (Minecraft 1.20.1 and newer).
- *
- * <p>GLFW wants its calls on the thread that owns the window, so the key state
- * is refreshed by a task handed to the game's own executor and read back from a
- * cached flag. Only if the game exposes no task queue at all is
- * {@code glfwGetKey} called directly.</p>
- */
+/** Keyboard source for LWJGL 3 / GLFW runtimes (Minecraft 1.20.1 and newer). */
 public final class Lwjgl3KeyProbe implements KeyProbe {
     private static final int GLFW_KEY_RIGHT_SHIFT = 344;
     private static final int GLFW_PRESS = 1;
@@ -69,6 +63,12 @@ public final class Lwjgl3KeyProbe implements KeyProbe {
     @Override
     public String describe() {
         return "LWJGL 3 GLFW (window=0x" + Long.toHexString(window) + ")";
+    }
+
+    @Override
+    public void close() {
+        broken = true;
+        pressed.set(false);
     }
 
     private void refresh() {

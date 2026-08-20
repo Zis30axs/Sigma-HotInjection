@@ -1,44 +1,54 @@
 package dev.zis30axs.sigma.hotinjection.agent.input;
 
+import dev.zis30axs.sigma.hotinjection.input.HotKey;
 import dev.zis30axs.sigma.hotinjection.input.KeyProbe;
-import java.lang.reflect.Method;
 
 public final class KeyProbes {
-    private KeyProbes() { }
+    private KeyProbes() {
+    }
 
-    public static KeyProbe autoDetect() { return legacy(); }
+    public static KeyProbe autoDetect() {
+        KeyProbe legacy = Lwjgl2KeyProbe.create();
+        if (legacy != null && legacy.isAvailable()) {
+            return legacy;
+        }
+        KeyProbe modern = Lwjgl3KeyProbe.create();
+        if (modern != null && modern.isAvailable()) {
+            return modern;
+        }
+        return unavailable("No supported keyboard backend");
+    }
 
     public static KeyProbe legacy() {
-        try {
-            final Class<?> keyboard = Class.forName("org.lwjgl.input.Keyboard");
-            final Method isKeyDown = keyboard.getMethod("isKeyDown", Integer.TYPE);
-            return new KeyProbe() {
-                @Override
-                public boolean isRightShiftDown() {
-                    try {
-                        return Boolean.TRUE.equals(isKeyDown.invoke(null, Integer.valueOf(54)));
-                    } catch (Throwable ignored) {
-                        return false;
-                    }
-                }
-
-                @Override
-                public void close() { }
-            };
-        } catch (Throwable ignored) {
-            return unavailable();
-        }
+        KeyProbe probe = Lwjgl2KeyProbe.create();
+        return probe == null ? unavailable("LWJGL 2 keyboard unavailable") : probe;
     }
 
     public static KeyProbe modern() {
-        // GLFW requires a verified Minecraft window handle. Never guess one.
-        return unavailable();
+        KeyProbe probe = Lwjgl3KeyProbe.create();
+        return probe == null ? unavailable("LWJGL 3/GLFW keyboard unavailable") : probe;
     }
 
-    private static KeyProbe unavailable() {
+    private static KeyProbe unavailable(final String description) {
         return new KeyProbe() {
-            @Override public boolean isRightShiftDown() { return false; }
-            @Override public void close() { }
+            @Override
+            public boolean isAvailable() {
+                return false;
+            }
+
+            @Override
+            public boolean isDown(HotKey key) {
+                return false;
+            }
+
+            @Override
+            public String describe() {
+                return description;
+            }
+
+            @Override
+            public void close() {
+            }
         };
     }
 }

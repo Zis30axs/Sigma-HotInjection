@@ -3,6 +3,7 @@ package dev.zis30axs.sigma.hotinjection.agent.input;
 import dev.zis30axs.sigma.hotinjection.agent.client.GameAccess;
 import dev.zis30axs.sigma.hotinjection.input.HotKey;
 import dev.zis30axs.sigma.hotinjection.input.KeyProbe;
+
 import java.lang.reflect.Method;
 
 /** Keyboard source for LWJGL 2 runtimes (Minecraft 1.7.10 and 1.8.9). */
@@ -59,6 +60,11 @@ public final class Lwjgl2KeyProbe implements KeyProbe {
     @Override
     public String describe() {
         return "LWJGL 2 Keyboard";
+    }
+
+    @Override
+    public void close() {
+        // LWJGL owns the keyboard lifecycle; the probe has no resources to release.
     }
 
     private static Method declared(Class<?> type, String name, Class<?>... parameters) {

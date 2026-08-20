@@ -1,8 +1,9 @@
 package dev.zis30axs.sigma.hotinjection.agent.modules;
 
 import dev.zis30axs.sigma.hotinjection.HotInjectionRuntime;
-import dev.zis30axs.sigma.hotinjection.agent.gui.SwingClickGuiHost;
+import dev.zis30axs.sigma.hotinjection.agent.gui.ClickGuiController;
 import dev.zis30axs.sigma.hotinjection.event.ClickGuiToggleEvent;
+import dev.zis30axs.sigma.hotinjection.input.HotKey;
 import dev.zis30axs.sigma.hotinjection.input.KeyProbe;
 import dev.zis30axs.sigma.hotinjection.module.Module;
 import dev.zis30axs.sigma.hotinjection.module.ModuleCategory;
@@ -31,14 +32,19 @@ public final class ClickGuiModule extends Module {
 
     @Override
     protected void onEnable() {
-        runtime.setClickGuiHost(new SwingClickGuiHost(runtime));
+        runtime.setClickGuiHost(new ClickGuiController(runtime));
         VersionAdapter adapter = runtime.getActiveAdapter();
         keyProbe = adapter == null ? null : adapter.createKeyProbe();
-        if (keyProbe == null) return;
+        if (keyProbe == null || !keyProbe.isAvailable()) {
+            return;
+        }
 
         running = true;
         keyThread = new Thread(new Runnable() {
-            @Override public void run() { pollKey(); }
+            @Override
+            public void run() {
+                pollKey();
+            }
         }, "Sigma-HotInjection-ClickGUI-Key");
         keyThread.setDaemon(true);
         keyThread.start();
@@ -47,9 +53,13 @@ public final class ClickGuiModule extends Module {
     @Override
     protected void onDisable() {
         running = false;
-        if (keyProbe != null) keyProbe.close();
+        if (keyProbe != null) {
+            keyProbe.close();
+        }
         keyProbe = null;
-        if (runtime.getClickGuiHost() != null) runtime.getClickGuiHost().dispose();
+        if (runtime.getClickGuiHost() != null) {
+            runtime.getClickGuiHost().dispose();
+        }
         runtime.setClickGuiHost(null);
     }
 
@@ -57,11 +67,13 @@ public final class ClickGuiModule extends Module {
         boolean previous = false;
         while (running) {
             boolean down = hotkeyEnabled.getValue().booleanValue()
-                    && keyProbe != null && keyProbe.isRightShiftDown();
+                    && keyProbe != null
+                    && keyProbe.isAvailable()
+                    && keyProbe.isDown(HotKey.RIGHT_SHIFT);
             VersionAdapter adapter = runtime.getActiveAdapter();
             if (down && !previous && (adapter == null || adapter.isInWorld())) {
                 if (runtime.getClickGuiHost() != null) {
-                    runtime.getClickGuiHost().toggle(ClickGuiToggleEvent.SOURCE_KEY);
+                    runtime.getClickGuiHost().toggle(ClickGuiToggleEvent.SOURCE_HOTKEY);
                 }
             }
             previous = down;

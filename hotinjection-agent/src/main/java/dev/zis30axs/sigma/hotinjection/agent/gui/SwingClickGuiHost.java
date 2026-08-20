@@ -23,7 +23,9 @@ public final class SwingClickGuiHost implements ClickGuiHost {
     }
 
     @Override
-    public boolean isAvailable() { return !GraphicsEnvironment.isHeadless(); }
+    public boolean isAvailable() {
+        return !GraphicsEnvironment.isHeadless();
+    }
 
     @Override
     public boolean isOpen() {
@@ -32,32 +34,53 @@ public final class SwingClickGuiHost implements ClickGuiHost {
     }
 
     @Override
-    public void open(String source) {
+    public boolean open(String source) {
+        if (isOpen() || !isAvailable()) {
+            return false;
+        }
         ClickGuiToggleEvent event = runtime.getEventBus().post(new ClickGuiToggleEvent(source, true));
-        if (event.isCancelled() || !isAvailable()) return;
+        if (event.isCancelled()) {
+            return false;
+        }
         SwingUtilities.invokeLater(new Runnable() {
-            @Override public void run() { ensureFrame().setVisible(true); }
+            @Override
+            public void run() {
+                ensureFrame().setVisible(true);
+            }
         });
+        return true;
     }
 
     @Override
-    public void close(String source) {
+    public boolean close(String source) {
+        if (!isOpen()) {
+            return false;
+        }
         ClickGuiToggleEvent event = runtime.getEventBus().post(new ClickGuiToggleEvent(source, false));
-        if (event.isCancelled()) return;
+        if (event.isCancelled()) {
+            return false;
+        }
         SwingUtilities.invokeLater(new Runnable() {
-            @Override public void run() { if (frame != null) frame.setVisible(false); }
+            @Override
+            public void run() {
+                if (frame != null) {
+                    frame.setVisible(false);
+                }
+            }
         });
+        return true;
     }
 
     @Override
-    public void toggle(String source) {
-        if (isOpen()) close(source); else open(source);
+    public boolean toggle(String source) {
+        return isOpen() ? close(source) : open(source);
     }
 
     @Override
     public void dispose() {
         SwingUtilities.invokeLater(new Runnable() {
-            @Override public void run() {
+            @Override
+            public void run() {
                 if (frame != null) {
                     frame.dispose();
                     frame = null;
@@ -67,7 +90,9 @@ public final class SwingClickGuiHost implements ClickGuiHost {
     }
 
     private JFrame ensureFrame() {
-        if (frame != null) return frame;
+        if (frame != null) {
+            return frame;
+        }
         JFrame created = new JFrame("Sigma HotInjection");
         created.setDefaultCloseOperation(WindowConstants.HIDE_ON_CLOSE);
         created.setAlwaysOnTop(true);

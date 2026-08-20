@@ -4,6 +4,7 @@ import dev.zis30axs.sigma.hotinjection.HotInjectionRuntime;
 import dev.zis30axs.sigma.hotinjection.event.ClickGuiToggleEvent;
 import dev.zis30axs.sigma.hotinjection.gui.ClickGuiHost;
 import dev.zis30axs.sigma.hotinjection.util.LogUtil;
+
 import javax.swing.SwingUtilities;
 import java.awt.GraphicsEnvironment;
 
@@ -76,12 +77,12 @@ public final class ClickGuiController implements ClickGuiHost {
 
     @Override
     public synchronized boolean toggle(String source) {
-        if (open) {
-            close(source);
-        } else {
-            open(source);
-        }
-        return open;
+        return open ? close(source) : open(source);
+    }
+
+    @Override
+    public synchronized void dispose() {
+        shutdown();
     }
 
     /** Drops the window; used when the owning module is disabled. */
@@ -96,7 +97,7 @@ public final class ClickGuiController implements ClickGuiHost {
     }
 
     private boolean allowed(boolean opening, String source) {
-        ClickGuiToggleEvent event = runtime.getEventBus().post(new ClickGuiToggleEvent(opening, source));
+        ClickGuiToggleEvent event = runtime.getEventBus().post(new ClickGuiToggleEvent(source, opening));
         if (event.isCancelled()) {
             LogUtil.info("ClickGUI " + (opening ? "open" : "close") + " cancelled by the event bus.");
             return false;
