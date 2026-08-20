@@ -23,4 +23,8 @@ public final class ClickGuiRegistry {
     public synchronized List<ClickGuiButton> all() {
         return Collections.unmodifiableList(new ArrayList<ClickGuiButton>(buttons.values()));
     }
+
+    public synchronized int size() {
+        return buttons.size();
+    }
 }
