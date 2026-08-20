@@ -3,8 +3,11 @@ package dev.zis30axs.sigma.hotinjection.host;
 import com.sun.tools.attach.VirtualMachine;
 import com.sun.tools.attach.VirtualMachineDescriptor;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -31,39 +34,19 @@ public final class AttachService {
             targetsByPid.put(descriptor.id(), new TargetJvm(descriptor.id(), descriptor.displayName()));
         }
 
-        try {
-            ProcessHandle.allProcesses().forEach(process -> {
-                if (process.pid() == selfPid) {
-                    return;
-                }
-
-                ProcessHandle.Info info = process.info();
-                String command = info.command().orElse("");
-                String commandLine = info.commandLine().orElse("");
-                if (!isJavaProcess(command, commandLine)) {
-                    return;
-                }
-
-                String pid = Long.toString(process.pid());
-                String discoveredName = describeJavaProcess(command, commandLine);
-                TargetJvm existing = targetsByPid.get(pid);
-                if (existing == null || (!looksLikeMinecraft(existing.getDisplayName())
-                        && looksLikeMinecraft(discoveredName))) {
-                    targetsByPid.put(pid, new TargetJvm(pid, discoveredName));
-                }
-            });
-        } catch (UnsupportedOperationException ignored) {
-            // Some JVM/OS combinations may not expose ProcessHandle process enumeration.
+        if (isWindows()) {
+            scanWindowsJavaProcesses(targetsByPid, selfPid);
+        } else {
+            scanPortableJavaProcesses(targetsByPid, selfPid);
         }
 
         List<TargetJvm> targets = new ArrayList<TargetJvm>(targetsByPid.values());
         Collections.sort(targets, new Comparator<TargetJvm>() {
             @Override
             public int compare(TargetJvm a, TargetJvm b) {
-                boolean aMinecraft = looksLikeMinecraft(a.getDisplayName());
-                boolean bMinecraft = looksLikeMinecraft(b.getDisplayName());
-                if (aMinecraft != bMinecraft) {
-                    return aMinecraft ? -1 : 1;
+                int scoreDifference = Integer.compare(score(b.getDisplayName()), score(a.getDisplayName()));
+                if (scoreDifference != 0) {
+                    return scoreDifference;
                 }
                 return Long.compare(pidAsLong(a), pidAsLong(b));
             }
@@ -92,35 +75,155 @@ public final class AttachService {
         }
     }
 
-    private static boolean isJavaProcess(String command, String commandLine) {
-        String executable = command == null ? "" : new File(command).getName().toLowerCase(Locale.ROOT);
-        if ("java".equals(executable) || "java.exe".equals(executable)
-                || "javaw".equals(executable) || "javaw.exe".equals(executable)) {
-            return true;
-        }
+    private static void scanWindowsJavaProcesses(Map<String, TargetJvm> targetsByPid, long selfPid) {
+        Process process = null;
+        BufferedReader reader = null;
+        try {
+            process = new ProcessBuilder("tasklist.exe", "/FO", "CSV", "/NH")
+                    .redirectErrorStream(true)
+                    .start();
+            reader = new BufferedReader(new InputStreamReader(process.getInputStream(), Charset.defaultCharset()));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String[] row = parseTasklistRow(line);
+                if (row == null) {
+                    continue;
+                }
 
-        String lowerLine = commandLine == null ? "" : commandLine.toLowerCase(Locale.ROOT);
-        return lowerLine.contains("java.exe") || lowerLine.contains("javaw.exe")
-                || lowerLine.startsWith("java ") || lowerLine.startsWith("javaw ");
+                String executable = row[0].toLowerCase(Locale.ROOT);
+                if (!isJavaExecutable(executable)) {
+                    continue;
+                }
+
+                long numericPid;
+                try {
+                    numericPid = Long.parseLong(row[1]);
+                } catch (NumberFormatException ignored) {
+                    continue;
+                }
+                if (numericPid == selfPid) {
+                    continue;
+                }
+
+                String pid = Long.toString(numericPid);
+                TargetJvm existing = targetsByPid.get(pid);
+                String commandLine = readCommandLine(numericPid);
+                String discoveredName = describeJavaProcess(executable, commandLine);
+                if (existing == null || score(discoveredName) > score(existing.getDisplayName())) {
+                    targetsByPid.put(pid, new TargetJvm(pid, discoveredName));
+                }
+            }
+            process.waitFor();
+        } catch (Exception ignored) {
+            scanPortableJavaProcesses(targetsByPid, selfPid);
+        } finally {
+            if (reader != null) {
+                try {
+                    reader.close();
+                } catch (IOException ignored) {
+                }
+            }
+            if (process != null) {
+                process.destroy();
+            }
+        }
     }
 
-    private static String describeJavaProcess(String command, String commandLine) {
+    private static void scanPortableJavaProcesses(Map<String, TargetJvm> targetsByPid, long selfPid) {
+        try {
+            ProcessHandle.allProcesses().forEach(process -> {
+                if (process.pid() == selfPid) {
+                    return;
+                }
+                ProcessHandle.Info info = process.info();
+                String executable = executableName(info.command().orElse(""));
+                if (!isJavaExecutable(executable)) {
+                    return;
+                }
+                String pid = Long.toString(process.pid());
+                String discoveredName = describeJavaProcess(executable, info.commandLine().orElse(""));
+                TargetJvm existing = targetsByPid.get(pid);
+                if (existing == null || score(discoveredName) > score(existing.getDisplayName())) {
+                    targetsByPid.put(pid, new TargetJvm(pid, discoveredName));
+                }
+            });
+        } catch (UnsupportedOperationException ignored) {
+            // Attach API results remain available if OS process enumeration is unsupported.
+        }
+    }
+
+    private static String readCommandLine(long pid) {
+        try {
+            Optional<ProcessHandle> process = ProcessHandle.of(pid);
+            return process.isPresent() ? process.get().info().commandLine().orElse("") : "";
+        } catch (RuntimeException ignored) {
+            return "";
+        }
+    }
+
+    private static String[] parseTasklistRow(String line) {
+        if (line == null || line.isEmpty() || line.charAt(0) != '"') {
+            return null;
+        }
+        int firstSeparator = line.indexOf("\",\"");
+        if (firstSeparator < 0) {
+            return null;
+        }
+        int secondStart = firstSeparator + 3;
+        int secondEnd = line.indexOf('"', secondStart);
+        if (secondEnd < 0) {
+            return null;
+        }
+        String executable = line.substring(1, firstSeparator);
+        String pid = line.substring(secondStart, secondEnd);
+        return new String[] { executable, pid };
+    }
+
+    private static boolean isWindows() {
+        return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
+    }
+
+    private static String executableName(String command) {
+        return command == null || command.isEmpty()
+                ? ""
+                : new File(command).getName().toLowerCase(Locale.ROOT);
+    }
+
+    private static boolean isJavaExecutable(String executable) {
+        return "java".equals(executable) || "java.exe".equals(executable)
+                || "javaw".equals(executable) || "javaw.exe".equals(executable);
+    }
+
+    private static String describeJavaProcess(String executable, String commandLine) {
         String line = commandLine == null ? "" : commandLine.trim();
         if (looksLikeMinecraft(line)) {
             String version = extractMinecraftVersion(line);
             if (!version.isEmpty()) {
-                return "Minecraft " + version + " (OS JVM scan)";
+                return "Minecraft " + version + " [" + executable + "]";
             }
-            return "Minecraft (OS JVM scan)";
+            return "Minecraft [" + executable + "]";
         }
 
         String main = findKnownMainClass(line);
         if (!main.isEmpty()) {
-            return main + " (OS JVM scan)";
+            return main + " [" + executable + "]";
         }
 
-        String executable = command == null ? "" : new File(command).getName();
-        return executable.isEmpty() ? "Java process (OS JVM scan)" : executable + " (OS JVM scan)";
+        return (executable.isEmpty() ? "Java process" : executable) + " (OS JVM scan)";
+    }
+
+    private static int score(String value) {
+        if (looksLikeMinecraft(value)) {
+            return 40;
+        }
+        String lower = value == null ? "" : value.toLowerCase(Locale.ROOT);
+        if (lower.contains("javaw.exe") || lower.contains("[javaw")) {
+            return 30;
+        }
+        if (lower.contains("java.exe") || lower.contains("[java")) {
+            return 20;
+        }
+        return 10;
     }
 
     private static boolean looksLikeMinecraft(String value) {
