@@ -1,5 +1,6 @@
 package dev.zis30axs.sigma.hotinjection.host;
 
+import dev.zis30axs.sigma.hotinjection.host.model.RemoteBox;
 import dev.zis30axs.sigma.hotinjection.host.model.RemoteModule;
 import dev.zis30axs.sigma.hotinjection.host.model.RemoteSetting;
 
@@ -84,6 +85,28 @@ public final class AgentSession implements Closeable {
         return Collections.unmodifiableList(result);
     }
 
+    /**
+     * Requests one overlay frame. The aspect ratio of the overlay window is sent
+     * along so the Agent can project world geometry without knowing the window.
+     */
+    public synchronized List<RemoteBox> listOverlay(double aspectRatio) throws IOException {
+        writeLine(output, "OVERLAY\t" + aspectRatio);
+        List<RemoteBox> result = new ArrayList<RemoteBox>();
+        String line;
+        while ((line = input.readLine()) != null) {
+            if ("END".equals(line)) break;
+            if (line.startsWith("ERROR\t")) throw new IOException(line.substring(6));
+            if (!line.startsWith("BOX\t")) continue;
+            String[] parts = line.split("\\t", 7);
+            if (parts.length < 7) continue;
+            result.add(new RemoteBox(
+                    parseDouble(parts[1]), parseDouble(parts[2]),
+                    parseDouble(parts[3]), parseDouble(parts[4]),
+                    parseArgb(parts[5]), decode(parts[6])));
+        }
+        return Collections.unmodifiableList(result);
+    }
+
     public synchronized boolean setEnabled(String moduleId, boolean enabled) throws IOException {
         writeLine(output, "SET_ENABLED\t" + encode(moduleId) + "\t" + enabled);
         String line = input.readLine();
@@ -128,5 +151,9 @@ public final class AgentSession implements Closeable {
 
     private static double parseDouble(String value) {
         try { return Double.parseDouble(value); } catch (NumberFormatException ignored) { return 0.0D; }
+    }
+
+    private static int parseArgb(String value) {
+        try { return (int) Long.parseLong(value.trim(), 16); } catch (NumberFormatException ignored) { return 0xFFFFFFFF; }
     }
 }

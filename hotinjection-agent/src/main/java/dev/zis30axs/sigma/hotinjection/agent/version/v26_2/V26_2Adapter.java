@@ -1,8 +1,10 @@
 package dev.zis30axs.sigma.hotinjection.agent.version.v26_2;
 
 import dev.zis30axs.sigma.hotinjection.agent.input.KeyProbes;
+import dev.zis30axs.sigma.hotinjection.agent.input.MouseProbes;
 import dev.zis30axs.sigma.hotinjection.agent.version.AbstractVersionAdapter;
 import dev.zis30axs.sigma.hotinjection.input.KeyProbe;
+import dev.zis30axs.sigma.hotinjection.input.MouseProbe;
 import dev.zis30axs.sigma.hotinjection.version.MinecraftVersion;
 
 public final class V26_2Adapter extends AbstractVersionAdapter {
@@ -13,5 +15,10 @@ public final class V26_2Adapter extends AbstractVersionAdapter {
     @Override
     public KeyProbe createKeyProbe() {
         return KeyProbes.modern();
+    }
+
+    @Override
+    public MouseProbe createMouseProbe() {
+        return MouseProbes.modern();
     }
 }

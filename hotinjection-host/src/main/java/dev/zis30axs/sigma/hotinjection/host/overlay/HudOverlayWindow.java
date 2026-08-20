@@ -28,14 +28,18 @@ public final class HudOverlayWindow implements Closeable {
     private static final int WS_EX_TOOLWINDOW = 0x00000080;
     private static final int WS_EX_LAYERED = 0x00080000;
     private static final int WS_EX_NOACTIVATE = 0x08000000;
+    private static final long MODULE_POLL_MILLIS = 220L;
+    private static final long OVERLAY_POLL_MILLIS = 33L;
 
     private final AgentSession session;
     private final MinecraftWindowTracker tracker;
     private final HudOverlayPanel panel = new HudOverlayPanel();
     private final JWindow window = new JWindow();
     private final Timer positionTimer;
-    private final ScheduledExecutorService modulePoller;
+    private final ScheduledExecutorService poller;
     private volatile boolean closed;
+    private volatile double aspectRatio = 16.0D / 9.0D;
+    private volatile boolean overlayVisible;
     private boolean nativeStyleApplied;
 
     public HudOverlayWindow(long targetProcessId, AgentSession session) {
@@ -52,10 +56,10 @@ public final class HudOverlayWindow implements Closeable {
 
         positionTimer = new Timer(75, event -> updatePosition());
         positionTimer.setCoalesce(true);
-        modulePoller = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
+        poller = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
             @Override
             public Thread newThread(Runnable task) {
-                Thread thread = new Thread(task, "Sigma-HotInjection-HUD-Modules");
+                Thread thread = new Thread(task, "Sigma-HotInjection-HUD-Poller");
                 thread.setDaemon(true);
                 return thread;
             }
@@ -78,7 +82,7 @@ public final class HudOverlayWindow implements Closeable {
         if (SwingUtilities.isEventDispatchThread()) start.run();
         else SwingUtilities.invokeLater(start);
 
-        modulePoller.scheduleWithFixedDelay(new Runnable() {
+        poller.scheduleWithFixedDelay(new Runnable() {
             @Override
             public void run() {
                 if (closed) return;
@@ -94,7 +98,25 @@ public final class HudOverlayWindow implements Closeable {
                     // The control panel can temporarily own the synchronized session; retry next tick.
                 }
             }
-        }, 0L, 220L, TimeUnit.MILLISECONDS);
+        }, 0L, MODULE_POLL_MILLIS, TimeUnit.MILLISECONDS);
+
+        poller.scheduleWithFixedDelay(new Runnable() {
+            @Override
+            public void run() {
+                if (closed) return;
+                if (!overlayVisible) {
+                    panel.setBoxes(null);
+                    return;
+                }
+                try {
+                    // setBoxes only publishes a volatile reference, so the render
+                    // thread picks the frame up without an EDT round trip.
+                    panel.setBoxes(session.listOverlay(aspectRatio));
+                } catch (Throwable ignored) {
+                    // Same contention as the module poll; the next frame retries.
+                }
+            }
+        }, 0L, OVERLAY_POLL_MILLIS, TimeUnit.MILLISECONDS);
     }
 
     private void updatePosition() {
@@ -113,14 +135,17 @@ public final class HudOverlayWindow implements Closeable {
 
         Rectangle bounds = snapshot.getBounds();
         if (!bounds.equals(window.getBounds())) window.setBounds(bounds);
+        aspectRatio = bounds.height <= 0 ? 16.0D / 9.0D : bounds.width / (double) bounds.height;
         if (!window.isVisible()) {
             window.setVisible(true);
             applyClickThroughStyle();
         }
+        overlayVisible = true;
         window.repaint();
     }
 
     private void hideOverlay() {
+        overlayVisible = false;
         if (window.isVisible()) window.setVisible(false);
     }
 
@@ -142,7 +167,7 @@ public final class HudOverlayWindow implements Closeable {
     @Override
     public void close() {
         closed = true;
-        modulePoller.shutdownNow();
+        poller.shutdownNow();
         Runnable dispose = new Runnable() {
             @Override
             public void run() {

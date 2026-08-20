@@ -226,6 +226,31 @@ public final class GameAccess {
         return field == null ? null : ObjectGraph.read(field, mc);
     }
 
+    /** @return the client world instance, or {@code null} when it cannot be resolved. */
+    public static Object world() {
+        Object mc = client();
+        if (mc == null) {
+            return null;
+        }
+        Field field = findField(mc.getClass(), WORLD_FIELD_NAMES);
+        return field == null ? null : ObjectGraph.read(field, mc);
+    }
+
+    /**
+     * Walks up from {@code type} and returns the highest superclass that still
+     * belongs to the game. For any entity instance this resolves the shared
+     * {@code Entity} base class without knowing a single mapping.
+     */
+    public static Class<?> highestGameClass(Class<?> type) {
+        Class<?> best = null;
+        for (Class<?> current = type; current != null && current != Object.class; current = current.getSuperclass()) {
+            if (isGameClass(current)) {
+                best = current;
+            }
+        }
+        return best;
+    }
+
     /** @return true when {@code type} declares a non-static field assignable to {@code fieldType}. */
     public static boolean declaresFieldOfType(Class<?> type, Class<?> fieldType) {
         for (Class<?> current = type; current != null && current != Object.class; current = current.getSuperclass()) {

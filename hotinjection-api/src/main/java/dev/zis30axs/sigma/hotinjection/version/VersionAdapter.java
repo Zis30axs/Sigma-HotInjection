@@ -1,6 +1,7 @@
 package dev.zis30axs.sigma.hotinjection.version;
 
 import dev.zis30axs.sigma.hotinjection.input.KeyProbe;
+import dev.zis30axs.sigma.hotinjection.input.MouseProbe;
 
 public interface VersionAdapter {
     MinecraftVersion getVersion();
@@ -20,6 +21,12 @@ public interface VersionAdapter {
      *         version adapter cannot observe key state in this process.
      */
     KeyProbe createKeyProbe();
+
+    /**
+     * @return a mouse source for this version, or {@code null} when the version
+     *         adapter cannot observe mouse state in this process.
+     */
+    MouseProbe createMouseProbe();
 
     /**
      * @return true when the local player is currently in a world. Adapters that

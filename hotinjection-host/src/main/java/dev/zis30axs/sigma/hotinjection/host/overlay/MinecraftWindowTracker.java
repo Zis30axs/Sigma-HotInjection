@@ -3,6 +3,7 @@ package dev.zis30axs.sigma.hotinjection.host.overlay;
 import com.sun.jna.Native;
 import com.sun.jna.Pointer;
 import com.sun.jna.platform.win32.User32;
+import dev.zis30axs.sigma.hotinjection.host.overlay.ExtendedUser32;
 import com.sun.jna.platform.win32.WinDef;
 import com.sun.jna.platform.win32.WinUser;
 import com.sun.jna.ptr.IntByReference;
@@ -48,16 +49,16 @@ final class MinecraftWindowTracker {
     private WinDef.HWND resolveLargestWindow() {
         final WinDef.HWND[] best = new WinDef.HWND[1];
         final long[] largestArea = new long[1];
-        User32.INSTANCE.EnumWindows(new WinUser.WNDENUMPROC() {
+        ExtendedUser32.INSTANCE.EnumWindows(new WinUser.WNDENUMPROC() {
             @Override
             public boolean callback(WinDef.HWND window, Pointer data) {
                 if (!belongsToTarget(window)
-                        || !User32.INSTANCE.IsWindowVisible(window)
-                        || User32.INSTANCE.IsIconic(window)) {
+                        || !ExtendedUser32.INSTANCE.IsWindowVisible(window)
+                        || ExtendedUser32.INSTANCE.IsIconic(window)) {
                     return true;
                 }
                 WinDef.RECT client = new WinDef.RECT();
-                if (!User32.INSTANCE.GetClientRect(window, client)) return true;
+                if (!ExtendedUser32.INSTANCE.GetClientRect(window, client)) return true;
                 long width = Math.max(0, client.right - client.left);
                 long height = Math.max(0, client.bottom - client.top);
                 long area = width * height;
@@ -75,7 +76,7 @@ final class MinecraftWindowTracker {
         return window != null
                 && belongsToTarget(window)
                 && User32.INSTANCE.IsWindowVisible(window)
-                && !User32.INSTANCE.IsIconic(window);
+                && !ExtendedUser32.INSTANCE.IsIconic(window);
     }
 
     private boolean belongsToTarget(WinDef.HWND window) {

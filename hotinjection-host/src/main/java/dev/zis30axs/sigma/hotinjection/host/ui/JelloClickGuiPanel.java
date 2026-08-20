@@ -52,6 +52,11 @@ public final class JelloClickGuiPanel extends JPanel {
     private int moduleScroll;
     private int settingScroll;
     private int settingsPanelX = Integer.MAX_VALUE;
+    private RemoteSetting dragSetting;
+    private Rectangle dragBounds;
+    private boolean dragHighHandle;
+    private String pendingDragValue;
+    private long lastDragSendNanos;
     private BufferedImage backdrop;
     private Dimension backdropSize = new Dimension();
 
@@ -62,12 +67,15 @@ public final class JelloClickGuiPanel extends JPanel {
         setCursor(Cursor.getDefaultCursor());
         addMouseListener(new MouseAdapter() {
             @Override public void mouseClicked(MouseEvent event) { handleClick(event.getX(), event.getY()); }
+            @Override public void mousePressed(MouseEvent event) { handlePress(event.getX(), event.getY()); }
+            @Override public void mouseReleased(MouseEvent event) { endDrag(); }
         });
         addMouseMotionListener(new MouseMotionAdapter() {
             @Override public void mouseMoved(MouseEvent event) {
                 setCursor(findTarget(event.getX(), event.getY()) == null
                         ? Cursor.getDefaultCursor() : Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
             }
+            @Override public void mouseDragged(MouseEvent event) { updateDrag(event.getX(), false); }
         });
         addMouseWheelListener(this::handleWheel);
         refreshModules();
@@ -255,7 +263,7 @@ public final class JelloClickGuiPanel extends JPanel {
         }
 
         for (RemoteSetting setting : settings) {
-            int cardHeight = "NUMBER".equals(setting.getType()) ? 88 : 68;
+            int cardHeight = isSlider(setting) ? 88 : 68;
             if (settingY + cardHeight >= y + 164 && settingY <= bottom) {
                 Rectangle card = new Rectangle(x + 18, settingY, Math.max(190, width - 36), cardHeight - 8);
                 g.setColor(new Color(255, 255, 255, 14));
@@ -286,7 +294,25 @@ public final class JelloClickGuiPanel extends JPanel {
                     g.setPaint(new GradientPaint(slider.x, slider.y, ACCENT,
                             slider.x + slider.width, slider.y, ACCENT_2));
                     g.fillRoundRect(slider.x, slider.y, (int) Math.round(slider.width * ratio), slider.height, 8, 8);
-                    hitTargets.add(HitTarget.setting(slider, setting));
+                    paintKnob(g, slider, ratio);
+                    hitTargets.add(HitTarget.setting(grip(slider), setting));
+                } else if ("RANGE".equals(setting.getType())) {
+                    double[] range = parseRange(setting);
+                    fonts.draw(g, formatNumber(range[0]) + "  –  " + formatNumber(range[1]),
+                            card.x + 15, card.y + 32, 13, TEXT, SkijaFontRenderer.Weight.SEMIBOLD);
+                    Rectangle slider = new Rectangle(card.x + 15, card.y + 57, card.width - 30, 8);
+                    double lowRatio = ratioOf(setting, range[0]);
+                    double highRatio = ratioOf(setting, range[1]);
+                    g.setColor(new Color(255, 255, 255, 30));
+                    g.fillRoundRect(slider.x, slider.y, slider.width, slider.height, 8, 8);
+                    int lowX = (int) Math.round(slider.x + slider.width * lowRatio);
+                    int highX = (int) Math.round(slider.x + slider.width * highRatio);
+                    g.setPaint(new GradientPaint(slider.x, slider.y, ACCENT,
+                            slider.x + slider.width, slider.y, ACCENT_2));
+                    g.fillRoundRect(lowX, slider.y, Math.max(2, highX - lowX), slider.height, 8, 8);
+                    paintKnob(g, slider, lowRatio);
+                    paintKnob(g, slider, highRatio);
+                    hitTargets.add(HitTarget.setting(grip(slider), setting));
                 } else {
                     fonts.draw(g, fitText(setting.getValue(), card.width - 52, 14,
                                     SkijaFontRenderer.Weight.SEMIBOLD),
@@ -315,6 +341,50 @@ public final class JelloClickGuiPanel extends JPanel {
         int knobX = enabled ? bounds.x + bounds.width - diameter - 3 : bounds.x + 3;
         g.setColor(new Color(248, 249, 255));
         g.fillOval(knobX, bounds.y + 3, diameter, diameter);
+    }
+
+    private static boolean isSlider(RemoteSetting setting) {
+        String type = setting.getType();
+        return "NUMBER".equals(type) || "RANGE".equals(type);
+    }
+
+    /** Vertically padded hit area, so a thin bar is still easy to grab. */
+    private static Rectangle grip(Rectangle slider) {
+        return new Rectangle(slider.x, slider.y - 8, slider.width, slider.height + 16);
+    }
+
+    private void paintKnob(Graphics2D g, Rectangle slider, double ratio) {
+        int diameter = slider.height + 6;
+        int x = (int) Math.round(slider.x + slider.width * ratio) - diameter / 2;
+        int y = slider.y + (slider.height - diameter) / 2;
+        g.setColor(new Color(166, 116, 255, 60));
+        g.fillOval(x - 2, y - 2, diameter + 4, diameter + 4);
+        g.setColor(new Color(248, 249, 255));
+        g.fillOval(x, y, diameter, diameter);
+    }
+
+    private static double[] parseRange(RemoteSetting setting) {
+        String value = setting.getValue() == null ? "" : setting.getValue();
+        int separator = value.indexOf(':');
+        double low = parseDouble(separator < 0 ? value : value.substring(0, separator), setting.getMin());
+        double high = separator < 0 ? low : parseDouble(value.substring(separator + 1), setting.getMax());
+        if (high < low) {
+            double swap = low;
+            low = high;
+            high = swap;
+        }
+        return new double[] { low, high };
+    }
+
+    private static double ratioOf(RemoteSetting setting, double value) {
+        if (setting.getMax() <= setting.getMin()) return 0.0D;
+        double ratio = (value - setting.getMin()) / (setting.getMax() - setting.getMin());
+        return Math.max(0.0D, Math.min(1.0D, ratio));
+    }
+
+    private static String formatNumber(double value) {
+        if (Math.abs(value - Math.rint(value)) < 0.0005D) return Long.toString(Math.round(value));
+        return String.valueOf(Math.round(value * 100.0D) / 100.0D);
     }
 
     private void paintGlass(Graphics2D g, int x, int y, int width, int height, int radius, Color fill) {
@@ -392,7 +462,83 @@ public final class JelloClickGuiPanel extends JPanel {
             }
             return;
         }
-        if (target.setting != null) applySetting(target.setting, target.bounds, x);
+        if (target.setting != null) {
+            // Sliders are owned by the press/drag path so a click cannot fight a drag.
+            if (!isSlider(target.setting)) applySetting(target.setting);
+        }
+    }
+
+    private void handlePress(int x, int y) {
+        HitTarget target = findTarget(x, y);
+        if (target == null || target.setting == null || !isSlider(target.setting)) return;
+        dragSetting = target.setting;
+        dragBounds = target.bounds;
+        dragHighHandle = "RANGE".equals(target.setting.getType())
+                && nearestHandleIsHigh(target.setting, target.bounds, x);
+        updateDrag(x, true);
+    }
+
+    /** Live drag: the local value updates every frame, the Agent every 60 ms. */
+    private void updateDrag(int x, boolean immediate) {
+        RemoteSetting setting = dragSetting;
+        Rectangle bounds = dragBounds;
+        if (setting == null || bounds == null) return;
+        String next = "RANGE".equals(setting.getType())
+                ? rangeValue(setting, bounds, x, dragHighHandle)
+                : numberValue(setting, bounds, x);
+        if (!immediate && next.equals(setting.getValue())) return;
+        setting.setValue(next);
+        repaint();
+
+        long now = System.nanoTime();
+        if (immediate || now - lastDragSendNanos >= 60_000_000L) {
+            lastDragSendNanos = now;
+            pendingDragValue = null;
+            sendSetting(setting, next, false);
+        } else {
+            pendingDragValue = next;
+        }
+    }
+
+    private void endDrag() {
+        RemoteSetting setting = dragSetting;
+        String pending = pendingDragValue;
+        dragSetting = null;
+        dragBounds = null;
+        pendingDragValue = null;
+        if (setting != null && pending != null) sendSetting(setting, pending, false);
+    }
+
+    private boolean nearestHandleIsHigh(RemoteSetting setting, Rectangle bounds, int x) {
+        double[] range = parseRange(setting);
+        int lowX = (int) Math.round(bounds.x + bounds.width * ratioOf(setting, range[0]));
+        int highX = (int) Math.round(bounds.x + bounds.width * ratioOf(setting, range[1]));
+        if (lowX == highX) return x >= lowX;
+        return Math.abs(x - highX) < Math.abs(x - lowX);
+    }
+
+    private String numberValue(RemoteSetting setting, Rectangle bounds, int x) {
+        return Double.toString(snap(setting, valueAt(setting, bounds, x)));
+    }
+
+    private String rangeValue(RemoteSetting setting, Rectangle bounds, int x, boolean high) {
+        double[] range = parseRange(setting);
+        double value = snap(setting, valueAt(setting, bounds, x));
+        if (high) return range[0] + ":" + Math.max(value, range[0]);
+        return Math.min(value, range[1]) + ":" + range[1];
+    }
+
+    private static double valueAt(RemoteSetting setting, Rectangle bounds, int x) {
+        double ratio = Math.max(0.0D, Math.min(1.0D,
+                (x - bounds.x) / (double) Math.max(1, bounds.width)));
+        return setting.getMin() + (setting.getMax() - setting.getMin()) * ratio;
+    }
+
+    private static double snap(RemoteSetting setting, double raw) {
+        double step = setting.getStep() <= 0.0D ? 0.1D : setting.getStep();
+        double snapped = setting.getMin() + Math.round((raw - setting.getMin()) / step) * step;
+        snapped = Math.max(setting.getMin(), Math.min(setting.getMax(), snapped));
+        return Math.round(snapped * 100000.0D) / 100000.0D;
     }
 
     private void handleWheel(MouseWheelEvent event) {
@@ -472,32 +618,45 @@ public final class JelloClickGuiPanel extends JPanel {
         }.execute();
     }
 
-    private void applySetting(final RemoteSetting setting, Rectangle bounds, int mouseX) {
-        String next = setting.getValue();
+    private void applySetting(final RemoteSetting setting) {
+        String next;
         if ("BOOLEAN".equals(setting.getType())) {
             next = Boolean.toString(!Boolean.parseBoolean(setting.getValue()));
-        } else if ("NUMBER".equals(setting.getType())) {
-            double ratio = Math.max(0.0D, Math.min(1.0D, (mouseX - bounds.x) / (double) Math.max(1, bounds.width)));
-            double raw = setting.getMin() + (setting.getMax() - setting.getMin()) * ratio;
-            double step = setting.getStep() <= 0.0D ? 0.1D : setting.getStep();
-            double value = setting.getMin() + Math.round((raw - setting.getMin()) / step) * step;
-            next = Double.toString(value);
         } else if ("MODE".equals(setting.getType()) && !setting.getOptions().isEmpty()) {
             int index = setting.getOptions().indexOf(setting.getValue());
             next = setting.getOptions().get((index + 1 + setting.getOptions().size()) % setting.getOptions().size());
+        } else {
+            return;
         }
-        final String requested = next;
-        final RemoteModule module = selectedModule;
-        if (module == null) return;
         busy = true;
+        sendSetting(setting, next, true);
+    }
+
+    /**
+     * @param blocking true for discrete edits, which hold the panel until the
+     *                 Agent answered; false for drag updates, whose replies must
+     *                 never overwrite a newer local value.
+     */
+    private void sendSetting(final RemoteSetting setting, final String requested, final boolean blocking) {
+        final RemoteModule module = selectedModule;
+        if (module == null) {
+            busy = false;
+            return;
+        }
         new SwingWorker<String, Void>() {
             @Override protected String doInBackground() throws Exception {
                 return session.setSetting(module.getId(), setting.getId(), requested);
             }
             @Override protected void done() {
-                try { setting.setValue(get()); }
-                catch (Exception error) { status = "Error: " + rootMessage(error); }
-                finally { busy = false; repaint(); }
+                try {
+                    String confirmed = get();
+                    if (blocking || dragSetting == null) setting.setValue(confirmed);
+                } catch (Exception error) {
+                    status = "Error: " + rootMessage(error);
+                } finally {
+                    if (blocking) busy = false;
+                    repaint();
+                }
             }
         }.execute();
     }

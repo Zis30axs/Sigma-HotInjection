@@ -3,6 +3,8 @@ package dev.zis30axs.sigma.hotinjection.agent.control;
 import dev.zis30axs.sigma.hotinjection.HotInjectionRuntime;
 import dev.zis30axs.sigma.hotinjection.module.Module;
 import dev.zis30axs.sigma.hotinjection.module.setting.ModuleSetting;
+import dev.zis30axs.sigma.hotinjection.overlay.OverlayBox;
+import dev.zis30axs.sigma.hotinjection.overlay.OverlaySource;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -15,6 +17,7 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.List;
 
 /** Loopback-only, token-authenticated control channel used by the standalone Host ClickGUI. */
 public final class AgentControlServer {
@@ -85,6 +88,8 @@ public final class AgentControlServer {
                     writeSettings(out, decode(line.substring(9)));
                 } else if (line.startsWith("SET\t")) {
                     setSetting(out, line);
+                } else if (line.startsWith("OVERLAY\t")) {
+                    writeOverlay(out, line);
                 } else {
                     writeLine(out, "ERROR\tunknown-command");
                 }
@@ -179,6 +184,46 @@ public final class AgentControlServer {
         } catch (RuntimeException error) {
             writeLine(out, "ERROR\tinvalid-value");
         }
+    }
+
+    /**
+     * Streams one overlay frame: every enabled {@link OverlaySource} contributes
+     * boxes in normalized client coordinates. The Host sends the aspect ratio it
+     * measured so the Agent never has to guess the window size.
+     */
+    private void writeOverlay(BufferedWriter out, String line) throws IOException {
+        String[] parts = line.split("\\t", 2);
+        double aspectRatio = 16.0D / 9.0D;
+        if (parts.length >= 2) {
+            try {
+                aspectRatio = Double.parseDouble(parts[1]);
+            } catch (NumberFormatException ignored) {
+                // Keep the default aspect ratio.
+            }
+        }
+        for (Module module : runtime.getModuleManager().all()) {
+            if (!module.isEnabled() || !(module instanceof OverlaySource)) continue;
+            List<OverlayBox> boxes;
+            try {
+                boxes = ((OverlaySource) module).collectOverlay(aspectRatio);
+            } catch (RuntimeException failure) {
+                continue;
+            }
+            if (boxes == null) continue;
+            for (OverlayBox box : boxes) {
+                writeLine(out, "BOX\t" + round(box.getX0())
+                        + "\t" + round(box.getY0())
+                        + "\t" + round(box.getX1())
+                        + "\t" + round(box.getY1())
+                        + "\t" + Integer.toHexString(box.getArgb())
+                        + "\t" + encode(box.getLabel()));
+            }
+        }
+        writeLine(out, "END");
+    }
+
+    private static String round(double value) {
+        return Double.toString(Math.round(value * 100000.0D) / 100000.0D);
     }
 
     private static void writeLine(BufferedWriter out, String value) throws IOException {

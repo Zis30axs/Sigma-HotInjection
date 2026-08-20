@@ -4,7 +4,9 @@ import dev.zis30axs.sigma.hotinjection.agent.LocalToastBridge;
 import dev.zis30axs.sigma.hotinjection.agent.client.ClientChat;
 import dev.zis30axs.sigma.hotinjection.agent.client.GameAccess;
 import dev.zis30axs.sigma.hotinjection.agent.input.KeyProbes;
+import dev.zis30axs.sigma.hotinjection.agent.input.MouseProbes;
 import dev.zis30axs.sigma.hotinjection.input.KeyProbe;
+import dev.zis30axs.sigma.hotinjection.input.MouseProbe;
 import dev.zis30axs.sigma.hotinjection.util.LogUtil;
 import dev.zis30axs.sigma.hotinjection.version.MinecraftVersion;
 import dev.zis30axs.sigma.hotinjection.version.VersionAdapter;
@@ -34,6 +36,11 @@ public abstract class AbstractVersionAdapter implements VersionAdapter {
     @Override
     public KeyProbe createKeyProbe() {
         return KeyProbes.autoDetect();
+    }
+
+    @Override
+    public MouseProbe createMouseProbe() {
+        return MouseProbes.autoDetect();
     }
 
     @Override

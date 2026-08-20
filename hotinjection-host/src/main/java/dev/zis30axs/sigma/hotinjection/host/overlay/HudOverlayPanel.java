@@ -1,11 +1,13 @@
 package dev.zis30axs.sigma.hotinjection.host.overlay;
 
+import dev.zis30axs.sigma.hotinjection.host.model.RemoteBox;
 import dev.zis30axs.sigma.hotinjection.host.model.RemoteModule;
 import dev.zis30axs.sigma.hotinjection.host.ui.SkijaFontRenderer;
 
 import javax.swing.JPanel;
 import javax.swing.Timer;
 import java.awt.AlphaComposite;
+import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
@@ -30,6 +32,7 @@ final class HudOverlayPanel extends JPanel {
     private final Map<String, Float> animation = new HashMap<String, Float>();
     private final Timer repaintTimer;
     private volatile List<RemoteModule> modules = Collections.emptyList();
+    private volatile List<RemoteBox> boxes = Collections.emptyList();
     private long lastFrameNanos = System.nanoTime();
 
     HudOverlayPanel() {
@@ -46,6 +49,13 @@ final class HudOverlayPanel extends JPanel {
                 : Collections.unmodifiableList(new ArrayList<RemoteModule>(updated));
     }
 
+    /** Latest projected geometry from the Agent, drawn underneath the HUD text. */
+    void setBoxes(List<RemoteBox> updated) {
+        boxes = updated == null
+                ? Collections.<RemoteBox>emptyList()
+                : Collections.unmodifiableList(new ArrayList<RemoteBox>(updated));
+    }
+
     void stop() {
         repaintTimer.stop();
     }
@@ -59,11 +69,47 @@ final class HudOverlayPanel extends JPanel {
             g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
             List<RemoteModule> snapshot = modules;
             updateAnimations(snapshot);
+            paintBoxes(g);
             if (isEnabled(snapshot, HUD_ID)) paintWatermark(g);
             if (isEnabled(snapshot, ARRAY_LIST_ID)) paintArrayList(g, snapshot);
         } finally {
             g.dispose();
         }
+    }
+
+    /**
+     * Draws the Agent's projected rectangles: a faint fill, a soft bloom pass and
+     * a crisp outline, so a box stays readable over both bright and dark scenes.
+     */
+    private void paintBoxes(Graphics2D g) {
+        List<RemoteBox> snapshot = boxes;
+        if (snapshot.isEmpty()) return;
+        float uiScale = uiScale();
+        float fontSize = 13.0f * uiScale;
+        for (RemoteBox box : snapshot) {
+            int x = Math.round((float) box.getX0() * getWidth());
+            int y = Math.round((float) box.getY0() * getHeight());
+            int width = Math.max(2, Math.round((float) (box.getX1() - box.getX0()) * getWidth()));
+            int height = Math.max(2, Math.round((float) (box.getY1() - box.getY0()) * getHeight()));
+            Color color = new Color(box.getArgb(), true);
+
+            g.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 26));
+            g.fillRect(x, y, width, height);
+            g.setStroke(new BasicStroke(Math.max(2.0f, 3.0f * uiScale)));
+            g.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 58));
+            g.drawRect(x, y, width, height);
+            g.setStroke(new BasicStroke(Math.max(1.0f, 1.4f * uiScale)));
+            g.setColor(color);
+            g.drawRect(x, y, width, height);
+
+            String label = box.getLabel();
+            if (!label.isEmpty()) {
+                float labelWidth = fonts.measure(label, fontSize, SkijaFontRenderer.Weight.REGULAR);
+                fonts.draw(g, label, x + (width - labelWidth) * 0.5f, y - fontSize - 3.0f,
+                        fontSize, ARRAY_TEXT, SkijaFontRenderer.Weight.REGULAR);
+            }
+        }
+        g.setStroke(new BasicStroke(1.0f));
     }
 
     private void paintWatermark(Graphics2D g) {
