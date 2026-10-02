@@ -42,25 +42,41 @@ Use a JDK 17+ installation containing `jdk.attach`:
 mvn clean package
 ```
 
-Important artifacts:
+The only artifact needed for distribution and normal use is:
 
 ```text
-hotinjection-agent/target/sigma-hotinjection-agent.jar
 hotinjection-host/target/sigma-hotinjection.jar
 ```
 
-The Host package embeds the Agent JAR and shades the Windows x64 Skija runtime,
-so the normal standalone path only needs the Host artifact.
+This executable JAR contains the Agent, its shared API and the Windows x64
+Skija/JNA runtime. Copy this one file to the machine where it will run; no
+separate Agent or API JAR is needed.
+
+The source remains split into three modules so the injected Agent and API keep
+Java 8 compatible bytecode while the Host uses Java 17. The Agent/API JARs and
+`original-*.jar` files produced during the build are intermediate artifacts,
+not additional files to distribute.
 
 ## Standalone
 
 ```bash
-java --add-modules jdk.attach -jar hotinjection-host/target/sigma-hotinjection.jar
+java --add-modules jdk.attach -jar sigma-hotinjection.jar
 ```
 
 The initial window scans visible JVMs and lets the user explicitly choose a
-target. After injection succeeds, the same window expands into the external
-ClickGUI.
+target. The Agent is selected automatically from the executable JAR. After
+injection succeeds, the same window expands into the external ClickGUI.
+
+The JDK Attach API requires an Agent JAR on disk. The Host extracts its embedded
+payload into a temporary cache identified by its SHA-256 checksum and reuses a
+matching cached JAR without overwriting files that may be loaded by another JVM.
+Each Host process remembers its selected file for subsequent injections. Cache
+files are preserved after the Host exits because an attached JVM may still load
+classes from the Agent. They can be removed after the attached JVMs have exited.
+
+For development or integration, `--attach <pid> --agent <path>` and
+`--stdio <agent.jar>` can explicitly select a different Agent. Normal startup
+needs neither option.
 
 The ClickGUI has three columns:
 

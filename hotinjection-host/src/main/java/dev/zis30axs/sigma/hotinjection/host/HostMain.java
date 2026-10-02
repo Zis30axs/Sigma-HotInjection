@@ -39,7 +39,7 @@ public final class HostMain {
         }
         String pid = args[1];
         String version = "auto";
-        File agent = AgentLocator.locate();
+        File agent = null;
         boolean notice = true;
         boolean clickGui = true;
         StringBuilder extraOptions = new StringBuilder();
@@ -62,17 +62,15 @@ public final class HostMain {
         }
 
         if (agent == null) {
-            throw new IllegalStateException("Agent JAR was not found. Use --agent <path>.");
+            service.attach(pid, version, notice, clickGui, extraOptions.toString());
+        } else {
+            service.attach(pid, agent, version, notice, clickGui, extraOptions.toString());
         }
-        service.attach(pid, agent, version, notice, clickGui, extraOptions.toString());
         System.out.println("OK attached pid=" + pid + " version=" + version + " clickgui=" + clickGui);
     }
 
     private static void runStdio(AttachService service, String[] args) throws Exception {
         File agent = args.length >= 2 ? new File(args[1]) : AgentLocator.locate();
-        if (agent == null) {
-            throw new IllegalStateException("Agent JAR was not found. Pass it after --stdio.");
-        }
 
         System.out.println("READY protocol=1");
         System.out.flush();
@@ -124,7 +122,7 @@ public final class HostMain {
 
     private static void printUsage() {
         System.out.println("Sigma HotInjection");
-        System.out.println("  no args: open standalone UI");
+        System.out.println("  no args: open standalone UI (agent included)");
         System.out.println("  --list");
         System.out.println("  --attach <pid> [--version <auto|1.7.10|1.8.9|1.20.1|1.21.11|26.2>] [--agent <jar>] [--quiet] [--no-clickgui] [--option k=v]");
         System.out.println("  --stdio [agent.jar]");

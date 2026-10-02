@@ -45,6 +45,19 @@ public final class AttachService {
         return Collections.unmodifiableList(targets);
     }
 
+    public void attach(String pid, String version, boolean showNotice) throws Exception {
+        attach(pid, version, showNotice, true, null);
+    }
+
+    public void attach(String pid, String version, boolean showNotice, boolean clickGui,
+                       String extraOptions) throws Exception {
+        performAttach(pid, AgentLocator.locate(), version, showNotice, clickGui, extraOptions);
+    }
+
+    public AgentSession attachSession(String pid, String version, boolean showNotice) throws Exception {
+        return attachSession(pid, AgentLocator.locate(), version, showNotice);
+    }
+
     public void attach(String pid, File agentJar, String version, boolean showNotice) throws Exception {
         performAttach(pid, agentJar, version, showNotice, true, null);
     }

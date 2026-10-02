@@ -8,14 +8,12 @@ import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
-import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
-import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingWorker;
 import javax.swing.WindowConstants;
@@ -23,7 +21,6 @@ import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
-import java.io.File;
 import java.util.List;
 
 public final class StandaloneFrame extends JFrame {
@@ -33,7 +30,6 @@ public final class StandaloneFrame extends JFrame {
     private final JComboBox<String> version = new JComboBox<String>(new String[] {
             "auto", "1.7.10", "1.8.9", "1.20.1", "1.21.11", "26.2"
     });
-    private final JTextField agentPath = new JTextField();
     private final JCheckBox notice = new JCheckBox("Show local injection notice", true);
     private final JLabel status = new JLabel("Ready");
     private final JButton refresh = new JButton("Refresh");
@@ -64,22 +60,12 @@ public final class StandaloneFrame extends JFrame {
         top.add(refresh, BorderLayout.EAST);
         root.add(top, BorderLayout.NORTH);
 
-        File detectedAgent = AgentLocator.locate();
-        if (detectedAgent != null) agentPath.setText(detectedAgent.getAbsolutePath());
-
-        JPanel settings = new JPanel(new GridLayout(3, 1, 4, 4));
+        JPanel settings = new JPanel(new GridLayout(2, 1, 4, 4));
         JPanel versionRow = new JPanel(new BorderLayout(6, 0));
         versionRow.add(new JLabel("Minecraft version:"), BorderLayout.WEST);
         versionRow.add(version, BorderLayout.CENTER);
         settings.add(versionRow);
 
-        JPanel agentRow = new JPanel(new BorderLayout(6, 0));
-        agentRow.add(new JLabel("Agent JAR:"), BorderLayout.WEST);
-        agentRow.add(agentPath, BorderLayout.CENTER);
-        JButton browse = new JButton("Browse...");
-        browse.addActionListener(event -> chooseAgent());
-        agentRow.add(browse, BorderLayout.EAST);
-        settings.add(agentRow);
         settings.add(notice);
 
         JPanel bottom = new JPanel(new BorderLayout(6, 6));
@@ -116,21 +102,12 @@ public final class StandaloneFrame extends JFrame {
         }.execute();
     }
 
-    private void chooseAgent() {
-        JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("Choose Sigma HotInjection agent JAR");
-        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-            agentPath.setText(chooser.getSelectedFile().getAbsolutePath());
-        }
-    }
-
     private void attachSelected() {
         final TargetJvm target = targetList.getSelectedValue();
         if (target == null) {
             JOptionPane.showMessageDialog(this, "Select a target Java process first.");
             return;
         }
-        final File agent = new File(agentPath.getText().trim());
         final String selectedVersion = String.valueOf(version.getSelectedItem());
         final boolean showNotice = notice.isSelected();
         attach.setEnabled(false);
@@ -138,7 +115,7 @@ public final class StandaloneFrame extends JFrame {
 
         new SwingWorker<AgentSession, Void>() {
             @Override protected AgentSession doInBackground() throws Exception {
-                return attachService.attachSession(target.getPid(), agent, selectedVersion, showNotice);
+                return attachService.attachSession(target.getPid(), selectedVersion, showNotice);
             }
             @Override protected void done() {
                 attach.setEnabled(true);
